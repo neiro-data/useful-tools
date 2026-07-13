@@ -141,6 +141,47 @@ export interface TodayResponse {
   recent_tags: TagRead[];
 }
 
+export type ReportPeriod = "week" | "month" | "quarter";
+
+export interface ReportCategoryBreakdown {
+  category: CategoryRead | null;
+  total_minutes: number;
+  entry_count: number;
+}
+
+export interface ReportTagBreakdown {
+  tag: TagRead;
+  total_minutes: number;
+  entry_count: number;
+}
+
+export interface ReportDayBreakdown {
+  date: string;
+  total_minutes: number;
+  entry_count: number;
+}
+
+export interface ReportSummaryResponse {
+  period: ReportPeriod;
+  start_date: string;
+  end_date: string;
+  timezone: string;
+  total_minutes: number;
+  entry_count: number;
+  by_category: ReportCategoryBreakdown[];
+  by_tag: ReportTagBreakdown[];
+  by_day: ReportDayBreakdown[];
+}
+
+export interface ReportNarrativeResponse {
+  period: ReportPeriod;
+  start_date: string;
+  end_date: string;
+  timezone: string;
+  narrative: string;
+  highlights: string[];
+}
+
 /** Stable, machine-readable error codes the frontend can branch on (see API_CONTRACT.md). */
 export type ApiErrorCode =
   | "bad_request"
