@@ -5,7 +5,19 @@ with **SQLite** as the canonical data store, and a **React** single-page app fro
 cloud dependency — all data lives in a local SQLite file.
 
 - **Backend:** FastAPI + SQLite (`app/`) — implements `app/API_CONTRACT.md`.
-- **Frontend:** React SPA (`frontend/`) — Today, Week, and Month screens (see `frontend/README.md`).
+- **Frontend:** React SPA (`frontend/`) — Today, Week, Month, Reports, and Settings screens
+  (see `frontend/README.md`).
+
+## Features
+
+- **Time tracking** — log entries against categories and tags; a live timer for the current task.
+- **Today / Week / Month** — review tracked time across day, week, and month views.
+- **Reports** — period summaries (week/month/quarter) with per-category and per-tag breakdowns,
+  daily bars, and a rule-based narrative summary of the period.
+- **Exports** — download your data as an Outlook-friendly HTML report, a CSV, or a raw SQLite
+  database backup.
+- **Settings** — configure timezone (drives day boundaries), week start, default entry mode, and
+  default export format.
 
 ## Project layout
 
@@ -20,11 +32,11 @@ time-tracker-app/
 │   ├── schema.py     # DB schema + idempotent init
 │   ├── schemas.py     # Pydantic request/response models
 │   ├── API_CONTRACT.md # endpoint contract (paths, bodies, status codes, error envelope)
-│   └── routers/       # categories, tags, entries, timer, today
+│   └── routers/       # categories, tags, entries, timer, today, reports, settings, exports
 ├── design/
 │   ├── DESIGN_SYSTEM.md
 │   ├── tokens.css      # CSS custom properties, imported directly by the frontend
-│   └── screens.md      # Today/Week/Month wireframes + keyboard shortcuts
+│   └── screens.md      # Today/Week/Month/Reports/Settings wireframes + keyboard shortcuts
 ├── frontend/           # React SPA (Vite + TypeScript) — see frontend/README.md
 ├── tests/
 ├── pyproject.toml
