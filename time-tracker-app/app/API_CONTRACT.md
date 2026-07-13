@@ -190,8 +190,8 @@ Query params (all optional, combinable with AND semantics):
 
 | Param | Type | Meaning |
 |---|---|---|
-| `start_date` | `date` (`YYYY-MM-DD`) | Include entries with `start_ts >= start_date 00:00:00Z`. |
-| `end_date` | `date` (`YYYY-MM-DD`) | Include entries with `start_ts <= end_date 23:59:59Z` (inclusive day). |
+| `start_date` | `date` (`YYYY-MM-DD`) | Include entries with `start_ts >= start_date 00:00:00` in `settings.timezone`. |
+| `end_date` | `date` (`YYYY-MM-DD`) | Include entries with `start_ts <= end_date 23:59:59.999999` in `settings.timezone` (inclusive day). |
 | `category_id` | `int` | Only entries with this category. |
 | `tag_id` | `int` | Only entries linked to this tag (via `entry_tags`). |
 | `entry_mode` | `"timer" \| "manual"` | Only entries of this mode. |
@@ -199,6 +199,13 @@ Query params (all optional, combinable with AND semantics):
 | `offset` | `int`, default 0 | Page offset. |
 
 Default sort: `start_ts DESC` (most recent first).
+
+`start_date`/`end_date` boundaries are resolved tz-aware, the same way as `/today`'s "today"
+boundary: the local calendar day is interpreted in `settings.timezone`, then converted to the
+UTC `start_ts` range used to filter (see `app.repo.local_range_bounds_utc`). This was previously
+hardcoded to UTC-midnight boundaries (`T00:00:00+00:00` / `T23:59:59+00:00`), which produced
+off-by-one-day results whenever `settings.timezone != "UTC"`; it now shares the exact
+boundary-resolution helper `/today` and `/reports/summary` use.
 
 - `200` → `EntryListResponse` (`{items: EntryRead[], total, limit, offset}`).
 - `422 validation_error` → e.g. `end_date < start_date`, unrecognized `entry_mode` value.
@@ -337,3 +344,51 @@ counts as today."
 
 No query params in Phase 1 (always "today" in the configured timezone). No additional error
 cases beyond the standard `500 internal_error`.
+
+---
+
+## Reports (summary aggregation) — Phase 2
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/reports/summary` | Aggregate completed entries over a week/month/quarter. |
+
+### `GET /reports/summary`
+
+Query params:
+
+| Param | Type | Meaning |
+|---|---|---|
+| `period` | `"week" \| "month" \| "quarter"` (required) | Granularity to aggregate over. |
+| `date` | `date` (`YYYY-MM-DD`), optional | Any date inside the desired period; resolves to the period containing it. Defaults to "today" in `settings.timezone` if omitted. |
+
+Period resolution (local, tz-aware, using the same `settings.timezone`-based boundary helper as
+`/today` and `/entries`):
+
+- `week` — ISO week (Monday–Sunday) containing `date`.
+- `month` — calendar month containing `date`.
+- `quarter` — calendar quarter (Jan–Mar, Apr–Jun, Jul–Sep, Oct–Dec) containing `date`.
+
+Only **completed** entries (`end_ts IS NOT NULL`) are included, consistent with `/today`. All
+sums/counts are computed server-side from stored `duration_minutes` values (rounded to the
+nearest whole minute) — never trusted from the client.
+
+- `200` → `ReportSummaryResponse`:
+  - `period`, `start_date`, `end_date` — the resolved period; `start_date`/`end_date` are local
+    dates, inclusive.
+  - `timezone` — the `settings.timezone` value used to resolve the period bounds.
+  - `total_minutes: int` — sum of `duration_minutes` (rounded) across all matching entries.
+  - `entry_count: int` — number of matching entries.
+  - `by_category: ReportCategoryBreakdown[]` — one row per distinct `category_id` present among
+    matching entries (`category: null` groups entries with no category), sorted by
+    `total_minutes` descending.
+  - `by_tag: ReportTagBreakdown[]` — one row per distinct tag present among matching entries,
+    sorted by `total_minutes` descending. An entry linked to multiple tags contributes its full
+    duration to **each** of its tags, so `sum(total_minutes)` across this list may exceed the
+    top-level `total_minutes` — this is intentional (it answers "how much time went into work
+    tagged X", not a partition of the total).
+  - `by_day: ReportDayBreakdown[]` — one row per **local day that has at least one completed
+    entry** within the period, ascending by date. Days with zero entries are omitted entirely
+    (not zero-filled) — the frontend is responsible for filling gaps if it needs a dense
+    day-by-day series (e.g. for a calendar heatmap).
+- `422 validation_error` → unrecognized `period` value, malformed `date`.

@@ -13,6 +13,8 @@ from app.errors import NotFoundError, ValidationError
 from app.repo import (
     compute_duration_minutes,
     entry_from_row,
+    get_settings_timezone,
+    local_range_bounds_utc,
     parse_ts,
     to_utc_iso,
     transaction,
@@ -59,12 +61,15 @@ def list_entries(
         params.append(tag_id)
 
     where_clauses: list[str] = []
+    tz_name = get_settings_timezone(db) if start_date is not None or end_date is not None else None
     if start_date is not None:
+        start_utc, _ = local_range_bounds_utc(tz_name or "UTC", start_date, start_date)
         where_clauses.append("entries.start_ts >= ?")
-        params.append(f"{start_date.isoformat()}T00:00:00+00:00")
+        params.append(start_utc)
     if end_date is not None:
+        _, end_utc = local_range_bounds_utc(tz_name or "UTC", end_date, end_date)
         where_clauses.append("entries.start_ts <= ?")
-        params.append(f"{end_date.isoformat()}T23:59:59+00:00")
+        params.append(end_utc)
     if category_id is not None:
         where_clauses.append("entries.category_id = ?")
         params.append(category_id)

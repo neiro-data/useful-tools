@@ -55,9 +55,5 @@ class ValidationError(DomainError):
 
     status_code = 422
 
-    def __init__(
-        self, message: str, *, fields: list[dict[str, Any]] | None = None
-    ) -> None:
-        super().__init__(
-            message, code="validation_error", details={"fields": fields or []}
-        )
+    def __init__(self, message: str, *, fields: list[dict[str, Any]] | None = None) -> None:
+        super().__init__(message, code="validation_error", details={"fields": fields or []})

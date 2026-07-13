@@ -18,7 +18,7 @@ Conventions
   this module supports.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from enum import StrEnum
 from typing import Annotated, Any
 
@@ -347,4 +347,115 @@ class TodayResponse(BaseModel):
     )
     recent_tags: list[TagRead] = Field(
         description="Active tags most recently used on an entry, most-recent first."
+    )
+
+
+# --- Reports ----------------------------------------------------------------------------------
+
+
+class ReportPeriod(StrEnum):
+    """Granularity for ``GET /reports/summary``."""
+
+    WEEK = "week"
+    MONTH = "month"
+    QUARTER = "quarter"
+
+
+class ReportCategoryBreakdown(BaseModel):
+    """One row of :attr:`ReportSummaryResponse.by_category`."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "category": {
+                    "id": 1,
+                    "name": "Deep Work",
+                    "color": "#4C6EF5",
+                    "is_active": True,
+                    "sort_order": 0,
+                },
+                "total_minutes": 180,
+                "entry_count": 3,
+            }
+        }
+    )
+
+    category: CategoryRead | None = Field(
+        description="``null`` groups entries with no category assigned."
+    )
+    total_minutes: int
+    entry_count: int
+
+
+class ReportTagBreakdown(BaseModel):
+    """One row of :attr:`ReportSummaryResponse.by_tag`.
+
+    An entry with multiple tags contributes its full duration to each of its tags, so
+    ``sum(total_minutes)`` across this list may exceed :attr:`ReportSummaryResponse.total_minutes`.
+    """
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "tag": {"id": 1, "name": "focus", "is_active": True},
+                "total_minutes": 90,
+                "entry_count": 1,
+            }
+        }
+    )
+
+    tag: TagRead
+    total_minutes: int
+    entry_count: int
+
+
+class ReportDayBreakdown(BaseModel):
+    """One row of :attr:`ReportSummaryResponse.by_day`. Only days with at least one completed
+    entry are included (empty days in the period are omitted, not zero-filled)."""
+
+    model_config = ConfigDict(
+        json_schema_extra={"example": {"date": "2026-07-13", "total_minutes": 90, "entry_count": 1}}
+    )
+
+    date: date
+    total_minutes: int
+    entry_count: int
+
+
+class ReportSummaryResponse(BaseModel):
+    """Response for ``GET /reports/summary``.
+
+    Covers only *completed* entries (``end_ts IS NOT NULL``), consistent with ``/today``. All
+    durations/sums are computed server-side from stored ``duration_minutes`` values.
+    """
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "period": "week",
+                "start_date": "2026-07-13",
+                "end_date": "2026-07-19",
+                "timezone": "UTC",
+                "total_minutes": 270,
+                "entry_count": 4,
+                "by_category": [],
+                "by_tag": [],
+                "by_day": [],
+            }
+        }
+    )
+
+    period: ReportPeriod
+    start_date: date = Field(description="Local, inclusive start of the resolved period.")
+    end_date: date = Field(description="Local, inclusive end of the resolved period.")
+    timezone: str = Field(description="``settings.timezone`` used to resolve the period bounds.")
+    total_minutes: int
+    entry_count: int
+    by_category: list[ReportCategoryBreakdown] = Field(
+        description="Sorted by total_minutes descending."
+    )
+    by_tag: list[ReportTagBreakdown] = Field(description="Sorted by total_minutes descending.")
+    by_day: list[ReportDayBreakdown] = Field(
+        description="One entry per local day that has at least one completed entry, ascending"
+        " by date."
     )

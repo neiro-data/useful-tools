@@ -8,7 +8,8 @@ several routers.
 import sqlite3
 from collections.abc import Generator, Iterable
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, time
+from zoneinfo import ZoneInfo
 
 from app.errors import NotFoundError
 from app.schemas import CategoryRead, EntryRead, TagRead
@@ -34,6 +35,36 @@ def parse_ts(text: str) -> datetime:
 def compute_duration_minutes(start: datetime, end: datetime) -> float:
     """Duration in minutes between two aware datetimes (``end`` may equal ``start``)."""
     return (end - start).total_seconds() / 60.0
+
+
+def get_settings_timezone(db: sqlite3.Connection) -> str:
+    """Read ``settings.timezone`` (falling back to ``"UTC"`` if no settings row exists yet)."""
+    row = db.execute("SELECT timezone FROM settings LIMIT 1").fetchone()
+    tz_name: str = row["timezone"] if row is not None else "UTC"
+    return tz_name
+
+
+def local_day_bounds_utc(tz_name: str, local_date: date) -> tuple[str, str]:
+    """UTC ISO-8601 ``(start, end)`` bounds covering a single local calendar day.
+
+    ``local_date`` is interpreted in ``tz_name`` (e.g. ``settings.timezone``); the returned bounds
+    span ``[local_date 00:00:00, local_date 23:59:59.999999]`` in that timezone, converted to UTC.
+    """
+    return local_range_bounds_utc(tz_name, local_date, local_date)
+
+
+def local_range_bounds_utc(tz_name: str, start_date: date, end_date: date) -> tuple[str, str]:
+    """UTC ISO-8601 ``(start, end)`` bounds covering an inclusive local date range.
+
+    Both ``start_date`` and ``end_date`` are interpreted in ``tz_name``; the returned bounds span
+    ``[start_date 00:00:00, end_date 23:59:59.999999]`` in that timezone, converted to UTC.
+    """
+    tz = ZoneInfo(tz_name)
+    start_local = datetime.combine(start_date, time.min, tzinfo=tz)
+    end_local = datetime.combine(end_date, time.max, tzinfo=tz)
+    start_utc = start_local.astimezone(UTC).isoformat()
+    end_utc = end_local.astimezone(UTC).isoformat()
+    return start_utc, end_utc
 
 
 # --- Transactions ----------------------------------------------------------------------------
