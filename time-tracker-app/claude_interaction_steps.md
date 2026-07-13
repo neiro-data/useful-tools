@@ -160,3 +160,28 @@ against `app/API_CONTRACT.md`/`app/schemas.py` and the `design/` design system.
 Phase 1 — test hardening: e2e backend lifecycle + edge cases, frontend error-envelope + aggregation tests (test-automator).
 
 Phase 1 — review fixes: generic 500 envelope handler + documented DELETE-cancels-running-timer, with tests (backend-developer).
+
+---
+
+## Phase 2 — Task 1: Reports API + timezone-consistent day boundaries
+
+**Branch:** `feat/reports-api` (PR flow — branch → PR → human review; no direct-to-main).
+
+- Added a shared tz-aware day-boundary helper in `app/repo.py` (`get_settings_timezone`,
+  `local_day_bounds_utc`, `local_range_bounds_utc`), reusing the `combine(time.min/max, tz)
+  .astimezone(UTC)` pattern from `today.py`.
+- Refactored `app/routers/today.py` to use the helper (no behavior change) and fixed the latent
+  day-boundary bug in `app/routers/entries.py` `list_entries`: `start_date`/`end_date` filters now
+  honor `settings.timezone` instead of hardcoded `+00:00` UTC-midnight strings.
+- New `GET /reports/summary?period={week|month|quarter}&date=YYYY-MM-DD` endpoint
+  (`app/routers/reports.py`, registered in `app/api.py`) returning tz-aware period totals with
+  `by_category`, `by_tag` (intentional multi-tag double-count, documented), and `by_day`
+  (only days with entries). New `Report*` pydantic models + `ReportPeriod` enum in `app/schemas.py`.
+  Only completed entries counted; running timer excluded. `API_CONTRACT.md` updated.
+- Tests: `tests/test_reports.py` — 10 new tests incl. a UTC↔Asia/Tokyo day-boundary regression test
+  proving both `/entries` and `/reports/summary` honor the local-day boundary. Suite: 70 passing.
+- Verified: `ruff format`/`ruff check`/`mypy app` clean; full `pytest` green (70).
+- Code review: no blocking issues. Non-blocking follow-ups noted (redundant `local_range_bounds_utc`
+  call in entries.py; N+1 tag lookup in reports.py) — deferred.
+
+**Agents:** backend-developer (impl), test-automator (tests), code-reviewer (review). All edits on Sonnet.

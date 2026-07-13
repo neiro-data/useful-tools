@@ -2,13 +2,19 @@
 contract.
 """
 
-from datetime import UTC, datetime, time
+from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter
 
 from app.deps import DbDep
-from app.repo import category_from_row, entry_from_row, tag_from_row
+from app.repo import (
+    category_from_row,
+    entry_from_row,
+    get_settings_timezone,
+    local_day_bounds_utc,
+    tag_from_row,
+)
 from app.schemas import TodayResponse
 
 router = APIRouter(tags=["today"])
@@ -25,15 +31,11 @@ def get_today(db: DbDep) -> TodayResponse:
     "Today" is resolved server-side using ``settings.timezone``; see ``app/API_CONTRACT.md`` for
     the exact boundary rule.
     """
-    settings_row = db.execute("SELECT timezone FROM settings LIMIT 1").fetchone()
-    tz_name = settings_row["timezone"] if settings_row is not None else "UTC"
+    tz_name = get_settings_timezone(db)
     tz = ZoneInfo(tz_name)
 
     today_local = datetime.now(tz).date()
-    start_local = datetime.combine(today_local, time.min, tzinfo=tz)
-    end_local = datetime.combine(today_local, time.max, tzinfo=tz)
-    start_utc = start_local.astimezone(UTC).isoformat()
-    end_utc = end_local.astimezone(UTC).isoformat()
+    start_utc, end_utc = local_day_bounds_utc(tz_name, today_local)
 
     entry_rows = db.execute(
         """

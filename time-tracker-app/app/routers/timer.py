@@ -81,9 +81,7 @@ def stop_timer(payload: TimerStopRequest, db: DbDep) -> EntryRead:
     with transaction(db):
         row = db.execute("SELECT * FROM entries WHERE end_ts IS NULL").fetchone()
         if row is None:
-            raise ConflictError(
-                "No timer is currently running.", code="no_running_timer"
-            )
+            raise ConflictError("No timer is currently running.", code="no_running_timer")
         entry_id = row["id"]
 
         fields = payload.model_dump(exclude_unset=True)
