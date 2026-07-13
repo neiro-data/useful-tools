@@ -1,0 +1,53 @@
+.root {
+  position: relative;
+  display: inline-block;
+}
+
+.trigger {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+}
+
+.placeholder {
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.popover {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + var(--space-1));
+  left: 0;
+  min-width: 180px;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-1);
+  margin: 0;
+  list-style: none;
+}
+
+.option,
+.clearOption {
+  display: flex;
+  width: 100%;
+  padding: var(--space-1) var(--space-2);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+}
+
+.option:hover,
+.clearOption:hover {
+  background: var(--color-bg-inset);
+}

@@ -33,3 +33,9 @@ exports/
 .vscode/
 .idea/
 .DS_Store
+
+# Frontend (Node/Vite)
+node_modules/
+frontend/dist/
+frontend/coverage/
+*.tsbuildinfo

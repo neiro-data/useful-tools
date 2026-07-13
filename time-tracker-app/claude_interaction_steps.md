@@ -110,3 +110,49 @@ screen layouts for the React SPA frontend (to be built in a later phase).
   5.85–11.07).
 
 **Agent:** ui-designer (design/spec only — no React code implemented).
+
+## Phase 1 — API implementation
+
+Phase 1 — API implementation: entries/timer/categories/tags routes + 54 tests (backend-developer).
+
+## Phase 1 — frontend
+
+Phase 1 — frontend: React Today + Week screens, typed API client, design tokens (frontend-developer).
+
+**Branch/task:** build the React SPA frontend (Today, Week, and — added mid-task — Month screens)
+against `app/API_CONTRACT.md`/`app/schemas.py` and the `design/` design system.
+
+**Steps taken:**
+- Scaffolded `frontend/` with Vite + React 19 + TypeScript (strict: `strict`, `noImplicitAny`,
+  `strictNullChecks`, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`), `react-router-dom`
+  for routing, ESLint (flat config, `typescript-eslint` + `eslint-plugin-react-hooks` +
+  `eslint-plugin-react-refresh` + `eslint-config-prettier`), Prettier, and Vitest +
+  `@testing-library/react` for component tests.
+- Added a typed API client (`src/api/`): `client.ts` (fetch wrapper), `errors.ts` (`ApiError` with
+  `isTimerAlreadyRunning`/`runningEntryId` helpers), `types.ts` (mirrors `app/schemas.py`), and one
+  module per resource (`categories`, `tags`, `entries`, `timer`, `today`). All non-2xx responses are
+  normalized into `ApiError` carrying the backend's `code`/`message`/`details`.
+- Configured a Vite dev proxy (`/api/*` → `http://127.0.0.1:8000`, overridable via
+  `VITE_BACKEND_ORIGIN`) so the app calls same-origin relative paths with no CORS setup.
+- Imported `design/tokens.css` globally in `main.tsx`; all components consume `var(--...)` tokens
+  (category colors via `--cat-*`, never hardcoded hex).
+- Built shared components: `EntryRow` (view + inline edit + delete-confirm), `CategoryChip`,
+  `TagChip`/`TagEditor`, `CategoryPicker`, `TimerWidget` (idle quick-add vs running timer, one
+  component per §8.4), `RecentChipsRail` (number-key shortcuts 1–6 / Shift+1–6), `ManualEntryForm`,
+  `DayGroup` (collapsible per-day section + "+ Add entry"), `SegmentedBreakdown` (category/tag
+  breakdown + legend, reused by Week and Month), `MiniBarChart`, `TimerBanner` (sticky
+  running-timer banner), `AppShell` (nav rail with Today/Week/Month live, Reports/Settings
+  disabled placeholders), `Skeleton`.
+- Built `TodayPage`, `WeekPage`, and `MonthPage`. Month was added as a mid-task scope addition: it
+  reuses Week's `DayGroup`/`SegmentedBreakdown`/`EntryRow` components verbatim over a
+  calendar-month range instead of a week, fetching `GET /entries` with a month-range date filter
+  and aggregating client-side (`utils/aggregate.ts`, `hooks/usePeriodEntries.ts` — both shared with
+  Week); no backend changes were needed.
+- Implemented the `409 timer_already_running` conflict as an inline banner on Today ("Stop it and
+  start this instead" / "Cancel"), per `design/screens.md` §1.5.
+- Added Vitest + Testing Library coverage for `EntryRow` (view/edit/delete states, running-entry
+  duration display) and `TimerWidget` (idle form validation/start, running-state rendering).
+- Verified: `npm run lint`, `npm run test` (7 tests passing), and `npm run build` (tsc -b + vite
+  build) all green.
+
+**Agent:** frontend-developer.

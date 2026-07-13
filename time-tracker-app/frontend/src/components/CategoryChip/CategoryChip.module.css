@@ -1,0 +1,38 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 24px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  line-height: var(--text-xs-lh);
+  font-weight: var(--weight-medium);
+  color: var(--chip-color);
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: default;
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+button.chip {
+  cursor: pointer;
+}
+
+.applied {
+  background: var(--chip-tint);
+  border-color: color-mix(in srgb, var(--chip-color) 45%, transparent);
+}
+
+.option {
+  border-color: var(--color-border);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--chip-color);
+  flex-shrink: 0;
+}

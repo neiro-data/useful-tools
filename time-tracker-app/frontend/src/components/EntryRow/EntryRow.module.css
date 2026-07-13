@@ -1,0 +1,146 @@
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 40px;
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.row:hover,
+.row:focus-visible {
+  background: var(--color-bg-inset);
+}
+
+.bar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+}
+
+.title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-base);
+  color: var(--color-text);
+}
+
+.tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  flex: 0 1 auto;
+}
+
+.duration {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-sm);
+  color: var(--color-text-secondary);
+  min-width: 56px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.menuButton {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.menuButton:hover {
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
+}
+
+.confirmBar,
+.editForm {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-left: var(--space-1);
+}
+
+.editForm {
+  flex-direction: column;
+  align-items: stretch;
+  padding: var(--space-2) 0;
+}
+
+.editMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.editActions,
+.confirmActions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.titleInput {
+  height: 36px;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-inset);
+  border: 1px solid var(--color-border);
+  padding: 0 var(--space-3);
+  font-size: var(--text-base);
+  color: var(--color-text);
+}
+
+.titleInput:focus {
+  outline: none;
+  border-color: var(--color-border-strong);
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+
+.primaryButton,
+.secondaryButton,
+.dangerButton {
+  height: 28px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+
+.primaryButton {
+  background: var(--color-accent);
+  color: var(--color-accent-text-on);
+  border: none;
+}
+
+.secondaryButton {
+  background: transparent;
+  border: 1px solid var(--color-border-strong);
+  color: var(--color-text);
+}
+
+.dangerButton {
+  background: var(--color-danger-bg);
+  border: 1px solid transparent;
+  color: var(--color-danger);
+}

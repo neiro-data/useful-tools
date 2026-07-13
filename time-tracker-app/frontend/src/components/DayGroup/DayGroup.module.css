@@ -1,0 +1,77 @@
+.group {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.group:last-child {
+  border-bottom: none;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-3) var(--space-2);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: var(--text-base);
+  color: var(--color-text);
+  text-align: left;
+}
+
+.header:hover .addButton {
+  opacity: 1;
+}
+
+.disclosure {
+  color: var(--color-text-muted);
+  width: 12px;
+}
+
+.dayLabel {
+  flex: 1;
+  font-weight: var(--weight-medium);
+}
+
+.dayTotal {
+  font-family: var(--font-mono);
+  color: var(--color-text-secondary);
+  font-size: var(--text-sm);
+}
+
+.addButton {
+  opacity: 0;
+  font-size: var(--text-xs);
+  color: var(--color-accent);
+  cursor: pointer;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.addButton:hover,
+.addButton:focus-visible {
+  opacity: 1;
+  background: var(--color-bg-inset);
+}
+
+.body {
+  padding: 0 var(--space-2) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.emptyDay {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  margin: 0;
+  padding: var(--space-2);
+}
+
+.list {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--color-surface);
+}
