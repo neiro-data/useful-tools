@@ -198,6 +198,22 @@ def test_delete_entry(client: TestClient) -> None:
     assert get_response.status_code == 404
 
 
+def test_delete_running_timer_entry_cancels_it(client: TestClient) -> None:
+    """DELETE on the currently-running timer's entry is an allowed "cancel/discard the running
+    timer" action: the entry is hard-deleted and no timer remains running afterwards."""
+    started = client.post("/timer/start", json={"title": "Deep work"}).json()
+
+    delete_response = client.delete(f"/entries/{started['id']}")
+    assert delete_response.status_code == 204
+
+    current_response = client.get("/timer/current")
+    assert current_response.status_code == 200
+    assert current_response.json() == {"running": False, "entry": None}
+
+    get_response = client.get(f"/entries/{started['id']}")
+    assert get_response.status_code == 404
+
+
 def test_delete_entry_not_found(client: TestClient) -> None:
     response = client.delete("/entries/999")
 

@@ -1,5 +1,6 @@
 """FastAPI application entrypoint for the Time Tracker app."""
 
+import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -14,6 +15,7 @@ from app.db import get_connection
 from app.errors import DomainError
 from app.schema import init_db
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
@@ -63,6 +65,30 @@ async def validation_exception_handler(
                 "message": "Request validation failed.",
                 "details": {"fields": fields},
             }
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(_request: Request, exc: Exception) -> JSONResponse:
+    """Catch-all fallback: translate any otherwise-unhandled exception into the standard error
+    envelope, per ``app/API_CONTRACT.md``'s ``500 internal_error`` row.
+
+    Registered after the more specific ``DomainError``/``RequestValidationError`` handlers above;
+    FastAPI dispatches to the most specific matching handler for an exception's type, so those
+    still take precedence and this only fires for exception types neither one covers. The real
+    exception is logged server-side; the client only ever sees a generic message, never internal
+    details or a stack trace.
+    """
+    logger.exception("Unhandled exception while processing request", exc_info=exc)
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": {
+                "code": "internal_error",
+                "message": "An unexpected error occurred.",
+                "details": None,
+            },
         },
     )
 

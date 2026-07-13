@@ -1,4 +1,4 @@
-"""Asserts the standard error envelope shape across a 404, a 409, and a 422."""
+"""Asserts the standard error envelope shape across a 404, a 409, a 422, and an unhandled 500."""
 
 from fastapi.testclient import TestClient
 
@@ -45,3 +45,20 @@ def test_422_error_envelope_shape(client: TestClient) -> None:
     for field in body["error"]["details"]["fields"]:
         assert "loc" in field
         assert "msg" in field
+
+
+def test_unhandled_exception_yields_generic_500_envelope(client: TestClient) -> None:
+    """A plain, otherwise-unhandled exception must still come back as the standard envelope,
+    with a generic ``message`` — never the raw exception text or a stack trace."""
+
+    @client.app.get("/__test_boom")  # type: ignore[union-attr]
+    def _boom() -> None:
+        raise RuntimeError("some sensitive internal detail that must not leak")
+
+    response = TestClient(client.app, raise_server_exceptions=False).get("/__test_boom")
+
+    assert response.status_code == 500
+    body = response.json()
+    _assert_envelope_shape(body)
+    assert body["error"]["code"] == "internal_error"
+    assert "sensitive internal detail" not in body["error"]["message"]

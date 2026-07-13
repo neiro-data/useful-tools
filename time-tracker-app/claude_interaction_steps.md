@@ -158,3 +158,5 @@ against `app/API_CONTRACT.md`/`app/schemas.py` and the `design/` design system.
 **Agent:** frontend-developer.
 
 Phase 1 — test hardening: e2e backend lifecycle + edge cases, frontend error-envelope + aggregation tests (test-automator).
+
+Phase 1 — review fixes: generic 500 envelope handler + documented DELETE-cancels-running-timer, with tests (backend-developer).
