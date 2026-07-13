@@ -74,6 +74,24 @@ def test_timer_start_invalid_category_is_404(client: TestClient) -> None:
     assert response.status_code == 404
 
 
+def test_stopping_an_already_stopped_timer_is_conflict(client: TestClient) -> None:
+    client.post("/timer/start", json={"title": "Only run"})
+
+    first_stop = client.post("/timer/stop", json={})
+    assert first_stop.status_code == 200
+
+    second_stop = client.post("/timer/stop", json={})
+
+    assert second_stop.status_code == 409
+    assert second_stop.json()["error"]["code"] == "no_running_timer"
+
+    # the entry stopped by the first call is untouched by the second (rejected) call
+    entry_id = first_stop.json()["id"]
+    entry = client.get(f"/entries/{entry_id}").json()
+    assert entry["end_ts"] == first_stop.json()["end_ts"]
+    assert entry["duration_minutes"] == first_stop.json()["duration_minutes"]
+
+
 def test_timer_stop_can_assign_category_and_tags(client: TestClient) -> None:
     category_response = client.post("/categories", json={"name": "Deep Work"})
     category_id = category_response.json()["id"]
@@ -82,9 +100,7 @@ def test_timer_stop_can_assign_category_and_tags(client: TestClient) -> None:
 
     client.post("/timer/start", json={})
 
-    response = client.post(
-        "/timer/stop", json={"category_id": category_id, "tag_ids": [tag_id]}
-    )
+    response = client.post("/timer/stop", json={"category_id": category_id, "tag_ids": [tag_id]})
 
     assert response.status_code == 200
     body = response.json()

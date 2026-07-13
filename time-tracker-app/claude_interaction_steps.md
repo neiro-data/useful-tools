@@ -156,3 +156,5 @@ against `app/API_CONTRACT.md`/`app/schemas.py` and the `design/` design system.
   build) all green.
 
 **Agent:** frontend-developer.
+
+Phase 1 — test hardening: e2e backend lifecycle + edge cases, frontend error-envelope + aggregation tests (test-automator).

@@ -222,9 +222,7 @@ def test_list_entries_filters_by_date_range(client: TestClient) -> None:
         },
     ).json()
 
-    response = client.get(
-        "/entries", params={"start_date": "2026-07-01", "end_date": "2026-07-31"}
-    )
+    response = client.get("/entries", params={"start_date": "2026-07-01", "end_date": "2026-07-31"})
 
     assert response.status_code == 200
     ids = {item["id"] for item in response.json()["items"]}
@@ -286,10 +284,33 @@ def test_list_entries_filters_by_tag(client: TestClient) -> None:
     assert other["id"] not in ids
 
 
+def test_list_entries_filters_by_deactivated_category_still_returns_historical_entries(
+    client: TestClient,
+) -> None:
+    category_id = _make_category(client, "Retired Category")
+    historical = client.post(
+        "/entries",
+        json={
+            "title": "Historical work",
+            "category_id": category_id,
+            "start_ts": "2026-07-13T09:00:00+00:00",
+            "end_ts": "2026-07-13T10:00:00+00:00",
+        },
+    ).json()
+
+    client.post(f"/categories/{category_id}/deactivate")
+
+    response = client.get("/entries", params={"category_id": category_id})
+
+    assert response.status_code == 200
+    body = response.json()
+    ids = {item["id"] for item in body["items"]}
+    assert historical["id"] in ids
+    assert body["items"][0]["category"]["is_active"] is False
+
+
 def test_list_entries_end_date_before_start_date_is_validation_error(client: TestClient) -> None:
-    response = client.get(
-        "/entries", params={"start_date": "2026-07-31", "end_date": "2026-07-01"}
-    )
+    response = client.get("/entries", params={"start_date": "2026-07-31", "end_date": "2026-07-01"})
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "validation_error"
