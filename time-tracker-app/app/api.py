@@ -7,7 +7,7 @@ request/response models each router implements against.
 
 from fastapi import APIRouter
 
-from app.routers import categories, entries, reports, tags, timer, today
+from app.routers import categories, entries, reports, settings, tags, timer, today
 
 router = APIRouter()
 router.include_router(categories.router)
@@ -16,3 +16,4 @@ router.include_router(entries.router)
 router.include_router(timer.router)
 router.include_router(today.router)
 router.include_router(reports.router)
+router.include_router(settings.router)
