@@ -213,3 +213,34 @@ Phase 1 — review fixes: generic 500 envelope handler + documented DELETE-cance
   guard. Deferred.
 
 **Agents:** backend-developer (impl), test-automator (tests), code-reviewer (review). All edits on Sonnet.
+
+## Phase 2 — Task 3: Exports API (SQLite backup + CSV + Outlook-friendly HTML)
+
+**Branch:** `feat/exports` (PR flow — branch → PR → human review; no direct-to-main).
+
+- New `app/routers/exports.py` (registered in `app/api.py`) with three download endpoints:
+  - `GET /exports/backup` — full DB snapshot via SQLite's **online backup API**
+    (`db.backup(dest)`) into a `tempfile.NamedTemporaryFile`, served as an
+    `application/octet-stream` attachment and unlinked afterward via a `BackgroundTask` (consistent
+    even under concurrent writes; no premature delete, no leak).
+  - `GET /exports/entries.csv` — completed entries as a `text/csv` attachment; optional
+    `start_date`/`end_date` (inclusive, timezone-aware, reusing `get_settings_timezone` +
+    `local_range_bounds_utc` exactly like `entries.list_entries`; `end_date < start_date` → 422).
+    Columns: `id,title,category,start_ts,end_ts,duration_minutes,entry_mode,tags,notes`
+    (raw stored UTC ISO timestamps; tag names `; `-joined). Running timer excluded.
+  - `GET /exports/report.html` — inline `text/html` (not an attachment); `period` (required) +
+    optional `date`. **Reuses `reports.get_reports_summary`** (zero duplicated aggregation) and
+    renders it as self-contained, inline-styled, `<table>`-based Outlook-pasteable HTML with all
+    user strings `html.escape`d.
+- Filenames use a `_safe_filename_slug(database_label)` helper (strips to `[a-z0-9-]` → no
+  `Content-Disposition` header injection / path traversal).
+- `API_CONTRACT.md`: new `## Exports` section documenting all three endpoints.
+- Tests: `tests/test_exports.py` — 12 new (backup octet-stream + valid SQLite magic header; CSV
+  header/rows, category+tags, running-timer exclusion, date-range filter, 422 path; HTML inline,
+  period range + category present, self-contained, period required). Suite: 93 passing (81 + 12).
+- Verified: `ruff format`/`ruff check`/`mypy app` clean; full `pytest` green (93).
+- Code review: no blocking issues. Non-blocking notes: consider CSV formula-injection guard
+  (prefix `=`/`+`/`-`/`@` when opened in Excel); CSV date-filter block mildly duplicates
+  `entries.list_entries` logic. Deferred.
+
+**Agents:** backend-developer (impl), test-automator (tests), code-reviewer (review). All edits on Sonnet.

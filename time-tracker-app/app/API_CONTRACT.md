@@ -432,3 +432,61 @@ unchanged. `id` is server-owned and never client-settable.
 - `422 validation_error` → invalid enum value for `default_entry_mode`/`week_starts_on`/
   `default_export_format`, blank `database_label`, or an unrecognized `timezone` (e.g.
   `"Not/AZone"`).
+
+---
+
+## Exports
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/exports/backup` | Download a full, consistent SQLite database snapshot. |
+| GET | `/exports/entries.csv` | Download completed entries as CSV. |
+| GET | `/exports/report.html` | View an Outlook-pasteable HTML report. |
+
+All three are plain `GET` downloads (no request body); none require or accept pagination
+params. `app/routers/exports.py` implements them.
+
+### `GET /exports/backup`
+
+Returns the entire SQLite database as an `application/octet-stream` attachment, built via
+SQLite's **online backup API** (`sqlite3.Connection.backup`) into a temporary file rather than
+reading the on-disk file directly — so the snapshot stays internally consistent even if a write
+happens on another connection concurrently. The temporary file is removed once the response has
+been sent.
+
+- `200` → raw SQLite file bytes.
+  - `Content-Disposition: attachment; filename="<label>-backup-<YYYYMMDD-HHMMSS>.sqlite"`, where
+    `<label>` is `settings.database_label` lowercased with non-alphanumeric runs collapsed to a
+    single `-` (filesystem-safe slug).
+
+### `GET /exports/entries.csv`
+
+Query params: `start_date: date | None`, `end_date: date | None` — both optional, inclusive,
+resolved in `settings.timezone` (same bounds helper as `GET /entries`).
+
+Only **completed** entries (`end_ts IS NOT NULL`) are included, `ORDER BY start_ts DESC`.
+Columns: `id, title, category, start_ts, end_ts, duration_minutes, entry_mode, tags, notes`.
+`category` is the category name (empty string if none set); `tags` is the entry's linked tag
+names (active and inactive) joined by `"; "`; `start_ts`/`end_ts` are the raw stored UTC ISO-8601
+strings (not reformatted).
+
+- `200` → `text/csv` body.
+  - `Content-Disposition: attachment; filename="<label>-entries-<YYYYMMDD>.csv"` (`<label>` slug
+    as above; date stamp is the export's generation date, not the query range).
+- `422 validation_error` → `end_date < start_date`.
+
+### `GET /exports/report.html`
+
+Query params mirror `GET /reports/summary`: `period: ReportPeriod` (required), `date: date |
+None`. Internally calls `get_reports_summary` (the same aggregation `GET /reports/summary` uses)
+and renders its `ReportSummaryResponse` as HTML — no separate aggregation logic.
+
+Rendered as a single, self-contained, **email-client-safe** document: inline `style="..."`
+attributes and `<table>`-based layout only (no `<style>` block, no external CSS, no JS), so it
+pastes cleanly into Outlook. Includes a heading (period + resolved date range + timezone), a
+totals line (total time as `Hh Mm` + entry count), and `by_category`/`by_tag`/`by_day` tables
+(time shown as `Hh Mm`).
+
+- `200` → `text/html` body, returned **inline** (not `Content-Disposition: attachment` — meant to
+  be viewed in a browser and copy-pasted, not downloaded).
+- `422 validation_error` → unrecognized `period` value, malformed `date`.
