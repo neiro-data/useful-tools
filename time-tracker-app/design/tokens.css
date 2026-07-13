@@ -1,0 +1,245 @@
+/*
+ * Time Tracker — design tokens
+ * ------------------------------------------------------------------------
+ * Framework-agnostic CSS custom properties. Import this file directly in the
+ * React app (e.g. `import "../design/tokens.css"` or copy into
+ * `src/styles/tokens.css`) — no build step required.
+ *
+ * Structure:
+ *   :root                              -> primitives + semantic tokens (LIGHT is the default theme)
+ *   @media (prefers-color-scheme: dark) -> semantic token overrides only (primitives stay, some remapped)
+ *
+ * A future manual theme toggle can override the same media query behavior by
+ * toggling a `[data-theme="dark"]` attribute on <html> with the identical
+ * property overrides shown below (duplicate the block under a
+ * `:root[data-theme="dark"]` selector when that lands).
+ *
+ * See DESIGN_SYSTEM.md for rationale (contrast ratios, spacing scale, etc).
+ */
+
+:root {
+  /* ---------------------------------------------------------------------
+   * Spacing (4px base unit)
+   * --------------------------------------------------------------------- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-8: 48px;
+  --space-10: 64px;
+
+  /* ---------------------------------------------------------------------
+   * Radius
+   * --------------------------------------------------------------------- */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  /* ---------------------------------------------------------------------
+   * Typography
+   * --------------------------------------------------------------------- */
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+  --font-mono: "SF Mono", ui-monospace, "Cascadia Code", Menlo, Consolas, monospace;
+
+  --text-xs: 12px;
+  --text-xs-lh: 16px;
+  --text-sm: 13px;
+  --text-sm-lh: 18px;
+  --text-base: 14px;
+  --text-base-lh: 20px;
+  --text-md: 16px;
+  --text-md-lh: 22px;
+  --text-lg: 20px;
+  --text-lg-lh: 26px;
+  --text-xl: 28px;
+  --text-xl-lh: 34px;
+  --text-timer: 40px;
+  --text-timer-lh: 1;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* ---------------------------------------------------------------------
+   * Motion
+   * --------------------------------------------------------------------- */
+  --motion-fast: 100ms;
+  --motion-base: 160ms;
+  --motion-slow: 240ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0, 0, 0.2, 1);
+
+  /* ---------------------------------------------------------------------
+   * Shadows (light theme values; dark theme redefines below)
+   * --------------------------------------------------------------------- */
+  --shadow-sm: 0 1px 2px rgba(16, 20, 26, 0.08), 0 1px 1px rgba(16, 20, 26, 0.04);
+  --shadow-md: 0 4px 12px rgba(16, 20, 26, 0.12), 0 2px 4px rgba(16, 20, 26, 0.06);
+
+  /* ---------------------------------------------------------------------
+   * Category color primitives — fixed 12-hue palette.
+   * Each hue has a light-theme value and a dark-theme value, independently
+   * tuned so both clear WCAG AA (>=4.5:1) as text/icon color against that
+   * theme's --color-bg and --color-surface. See DESIGN_SYSTEM.md §5.2.
+   * --------------------------------------------------------------------- */
+  --cat-red-light: #c0334a;
+  --cat-orange-light: #b25a17;
+  --cat-amber-light: #96660a;
+  --cat-lime-light: #5c7a1b;
+  --cat-green-light: #22795b;
+  --cat-teal-light: #1b7a78;
+  --cat-cyan-light: #1a6fa0;
+  --cat-blue-light: #3457c4;
+  --cat-indigo-light: #5a4fcf;
+  --cat-violet-light: #8034b8;
+  --cat-pink-light: #c13584;
+  --cat-slate-light: #5b6472;
+
+  --cat-red-dark: #f26e85;
+  --cat-orange-dark: #f2a65a;
+  --cat-amber-dark: #e8b84b;
+  --cat-lime-dark: #b3d661;
+  --cat-green-dark: #5fcb9e;
+  --cat-teal-dark: #5ad0cc;
+  --cat-cyan-dark: #5ec3f0;
+  --cat-blue-dark: #7fa0f5;
+  --cat-indigo-dark: #a79bff;
+  --cat-violet-dark: #cc8cf0;
+  --cat-pink-dark: #f291c4;
+  --cat-slate-dark: #aeb7c2;
+
+  /* Active category tokens — default to light-theme values; the dark media
+     query below repoints these to the *-dark primitives. Category chips,
+     entry-row bars, and breakdown charts should ALWAYS consume --cat-* (never
+     the -light/-dark primitives directly) so theme switching is automatic. */
+  --cat-red: var(--cat-red-light);
+  --cat-orange: var(--cat-orange-light);
+  --cat-amber: var(--cat-amber-light);
+  --cat-lime: var(--cat-lime-light);
+  --cat-green: var(--cat-green-light);
+  --cat-teal: var(--cat-teal-light);
+  --cat-cyan: var(--cat-cyan-light);
+  --cat-blue: var(--cat-blue-light);
+  --cat-indigo: var(--cat-indigo-light);
+  --cat-violet: var(--cat-violet-light);
+  --cat-pink: var(--cat-pink-light);
+  --cat-slate: var(--cat-slate-light);
+
+  /* Chip tint = 16% mix of category color into surface; consumers can also
+     compute this at runtime via color-mix() with --cat-* if preferred:
+       background: color-mix(in srgb, var(--cat-blue) 16%, var(--color-surface));
+     Provided here only as a documented convention, not a fixed token, since
+     it depends on the resolved category color at render time. */
+
+  /* ---------------------------------------------------------------------
+   * Semantic colors — LIGHT theme (default)
+   * --------------------------------------------------------------------- */
+  --color-bg: #ffffff;
+  --color-bg-subtle: #f7f8fa;
+  --color-bg-inset: #eef0f3;
+  --color-surface: #ffffff;
+
+  --color-border: #e2e5e9;
+  --color-border-strong: #c7cdd6;
+
+  --color-text: #12151a;
+  --color-text-secondary: #454c56;
+  --color-text-muted: #767f8a;
+
+  --color-accent: #2f5bd7;
+  --color-accent-hover: #2549b0;
+  --color-accent-text-on: #ffffff;
+  --color-accent-tint: #eaf0fe;
+
+  --color-danger: #c0334a;
+  --color-danger-hover: #9c2a3d;
+  --color-danger-bg: #fbeaed;
+
+  --color-success: #22795b;
+  --color-success-bg: #e7f4ee;
+
+  --color-focus-ring: var(--color-accent);
+}
+
+/* ===========================================================================
+ * DARK theme — overrides semantic tokens only. Respects OS-level setting;
+ * no manual toggle in V1 (see DESIGN_SYSTEM.md §5.4 for the future path).
+ * ========================================================================= */
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Repoint category tokens to their dark-tuned primitives */
+    --cat-red: var(--cat-red-dark);
+    --cat-orange: var(--cat-orange-dark);
+    --cat-amber: var(--cat-amber-dark);
+    --cat-lime: var(--cat-lime-dark);
+    --cat-green: var(--cat-green-dark);
+    --cat-teal: var(--cat-teal-dark);
+    --cat-cyan: var(--cat-cyan-dark);
+    --cat-blue: var(--cat-blue-dark);
+    --cat-indigo: var(--cat-indigo-dark);
+    --cat-violet: var(--cat-violet-dark);
+    --cat-pink: var(--cat-pink-dark);
+    --cat-slate: var(--cat-slate-dark);
+
+    --color-bg: #12151a;
+    --color-bg-subtle: #171b21;
+    --color-bg-inset: #1e232a;
+    --color-surface: #1a1e24;
+
+    --color-border: #2a2f37;
+    --color-border-strong: #3c434d;
+
+    --color-text: #eef1f5;
+    --color-text-secondary: #b9c0c9;
+    --color-text-muted: #838c96;
+
+    --color-accent: #6f93f5;
+    --color-accent-hover: #8faaf7;
+    --color-accent-text-on: #0d1420;
+    --color-accent-tint: #1c2740;
+
+    --color-danger: #f26e85;
+    --color-danger-hover: #f6909fe0;
+    --color-danger-bg: #3a1e24;
+
+    --color-success: #5fcb9e;
+    --color-success-bg: #17332a;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4), 0 1px 1px rgba(0, 0, 0, 0.24);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.48), 0 2px 6px rgba(0, 0, 0, 0.32);
+  }
+}
+
+/* ===========================================================================
+ * Minimal resets that the app can rely on tokens being applied consistently.
+ * Not a full CSS reset — the frontend-developer may layer their own on top.
+ * ========================================================================= */
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--text-base-lh);
+  font-weight: var(--weight-regular);
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}

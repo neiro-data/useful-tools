@@ -55,3 +55,58 @@ into the FastAPI app.
 - Verified: `uv run ruff check .`, `uv run mypy app`, `uv run pytest -q` all pass (8 tests).
 
 **Agent:** sql-pro.
+
+## Phase 1 — API contract
+
+Phase 1 — API contract: schemas + endpoint spec for categories/tags/entries/timer (api-designer).
+
+**Branch/task:** design (not implement) the REST contract for Phase 1 core capture — categories,
+tags, entries (manual mode), timer (single-active-timer rule), and a Today convenience
+aggregation. Reports/exports are Phase 2, out of scope.
+
+**Steps taken:**
+- Added `app/schemas.py`: pydantic v2 request/response models (`CategoryCreate/Update/Read`,
+  `TagCreate/Update/Read`, `EntryCreateManual`, `EntryUpdate`, `EntryRead`, list-response
+  envelopes, `TimerStartRequest`/`TimerStopRequest`/`TimerCurrentResponse`, `TodayResponse`,
+  `ErrorResponse`/`ErrorDetail`), with validators (`end_ts >= start_ts`, non-empty titles/names)
+  and `json_schema_extra` examples.
+- Added `app/API_CONTRACT.md`: full endpoint table (method/path/purpose/body/response/status
+  codes), a shared error envelope with a `code` catalog, pagination/partial-update/soft-delete
+  conventions, and explicit rules for the single-active-timer conflict (`409
+  timer_already_running` / `409 no_running_timer`) and duration computation
+  (`duration_minutes` always server-computed from `start_ts`/`end_ts`, never trusted from the
+  client).
+- Added `app/routers/{categories,tags,entries,timer,today}.py`: resource routers with full
+  signatures, `response_model`s, and docstrings, bodies stubbed as `raise NotImplementedError` for
+  the backend-developer to fill in; added `app/deps.py` (`get_db`/`DbDep`) as the shared DB
+  dependency. Wired all routers into `app/api.py`'s root router.
+- Verified: `uv run ruff check .`, `uv run mypy app` (strict), `uv run pytest -q` (8 tests, incl.
+  `/health`) all pass; confirmed all 12 new routes register and the OpenAPI schema builds via
+  `app.main.app.openapi()`.
+
+**Agent:** api-designer (design/spec only — no route logic implemented).
+
+## Phase 1 — design system + Today/Week wireframes
+
+Phase 1 — design system + Today/Week wireframes (ui-designer).
+
+**Branch/task:** design (not implement) the visual/interaction design system and the Today + Week
+screen layouts for the React SPA frontend (to be built in a later phase).
+
+**Steps taken:**
+- Added `design/DESIGN_SYSTEM.md`: principles, 8px spacing scale, typography scale (system font
+  stack + monospace for durations/timestamps), layout grid/breakpoints, a 12-hue fixed category
+  color palette (WCAG AA-verified ≥4.5:1 in both light and dark themes), and component patterns
+  (buttons, inputs, entry row, timer widget, category/tag chips, totals bar/segmented breakdown).
+- Added `design/tokens.css`: framework-agnostic CSS custom properties (spacing, radius, typography,
+  motion, shadows, semantic colors, 12 category color tokens) with a light default theme and a
+  `prefers-color-scheme: dark` override block.
+- Added `design/screens.md`: annotated wireframes for Today (quick-add, live timer, recent
+  category/tag rail, entries list) and Week (week nav, totals summary, by-category/by-tag
+  breakdown, collapsible day groups), covering empty/loading/active-timer/conflict states and
+  keyboard shortcuts for fast entry.
+- Verified all 12 category colors against `--color-bg`/`--color-surface` in both themes via a
+  WCAG relative-luminance contrast check (all pass ≥4.5:1; light theme 4.81–6.77, dark theme
+  5.85–11.07).
+
+**Agent:** ui-designer (design/spec only — no React code implemented).
