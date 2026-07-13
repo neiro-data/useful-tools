@@ -244,3 +244,37 @@ Phase 1 — review fixes: generic 500 envelope handler + documented DELETE-cance
   `entries.list_entries` logic. Deferred.
 
 **Agents:** backend-developer (impl), test-automator (tests), code-reviewer (review). All edits on Sonnet.
+
+## Phase 2 — Task 4: Rule-based weekly narrative summary
+
+**Branch:** `feat/weekly-narrative` (PR flow — branch → PR → human review; no direct-to-main).
+
+- New `GET /reports/narrative` endpoint (added to the existing `reports.router`, no new router
+  file / no `app/api.py` change). Rule-based, **no LLM / no external calls** — pure-Python string
+  assembly over the report aggregation.
+- **Reuses `reports.get_reports_summary(db, period, date)` directly** (zero duplicated
+  SQL/date/timezone math); same `period` (week/month/quarter, required) + optional `date`
+  (defaults to today in `settings.timezone`) contract as `/reports/summary`.
+- New `ReportNarrativeResponse` schema (`app/schemas.py`): `period`, `start_date`, `end_date`,
+  `timezone`, `narrative: str`, `highlights: list[str]`.
+- `_build_narrative()` rule engine composes an ordered `highlights` list + prose `narrative` from:
+  total time + entry count, top category (name/"Uncategorized" + time + whole-percent share) and
+  second category, busiest day (weekday name + date + time), daily average across **days-with-
+  entries** (not calendar days), and top tag (phrased neutrally re: tag double-counting). Empty
+  period (`entry_count == 0`) short-circuits to a single "no time tracked" highlight — guards
+  div-by-zero / empty-list.
+- DRY: promoted the `Hh Mm` minutes formatter to a shared `format_minutes()` in `reports.py`;
+  `exports.py` now imports it (dropped its duplicate `_format_minutes`; no new import cycle —
+  `exports.py` already imported from `reports.py`).
+- `API_CONTRACT.md`: new narrative subsection (params, response shape, composition order,
+  active-day denominator, empty-period behavior).
+- Tests: `tests/test_narrative.py` — 4 new (empty-period highlight/shape; seeded 2-category/1-tag
+  week asserting top category + share, busiest weekday, daily average, top tag, ordered non-empty
+  highlights; `period` required → 422; reconciliation of narrative figures vs `/reports/summary`).
+  Suite: 97 passing (93 + 4).
+- Verified: `ruff check`/`ruff format`/`mypy app` clean (19 source files); full `pytest` green (97).
+- Code review: no blocking issues. Non-blocking: `_build_narrative` recomputes top-share /
+  busiest-day / daily-average once for `highlights` and again for the prose string — a DRY
+  opportunity (build highlights first, reuse). Deferred.
+
+**Agents:** python-pro (impl), test-automator (tests), code-reviewer (review). All edits on Sonnet.

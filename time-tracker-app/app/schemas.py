@@ -461,6 +461,45 @@ class ReportSummaryResponse(BaseModel):
     )
 
 
+class ReportNarrativeResponse(BaseModel):
+    """Response for ``GET /reports/narrative``: a rule-based, plain-language summary of a
+    ``ReportSummaryResponse`` for the same period. Purely derived server-side from that summary's
+    already-validated aggregates — no additional data source, no LLM/external call."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "period": "week",
+                "start_date": "2026-07-13",
+                "end_date": "2026-07-19",
+                "timezone": "UTC",
+                "narrative": "You tracked 4h 30m across 4 entries this week (2026-07-13 to"
+                " 2026-07-19). Most of your time went to Deep Work (2h 30m, 56%), followed by"
+                " Admin (1h 0m). Tuesday (2026-07-14) was your busiest day at 2h 0m. You averaged"
+                " 2h 15m per active day. Most-used tag: focus (1h 30m across tagged entries).",
+                "highlights": [
+                    "Total: 4h 30m across 4 entries",
+                    "Top category: Deep Work (2h 30m, 56%)",
+                    "Second category: Admin (1h 0m)",
+                    "Busiest day: Tuesday, 2026-07-14 (2h 0m)",
+                    "Daily average: 2h 15m per active day",
+                    "Most-used tag: focus (1h 30m across tagged entries)",
+                ],
+            }
+        }
+    )
+
+    period: ReportPeriod
+    start_date: date = Field(description="Local, inclusive start of the resolved period.")
+    end_date: date = Field(description="Local, inclusive end of the resolved period.")
+    timezone: str = Field(description="``settings.timezone`` used to resolve the period bounds.")
+    narrative: str = Field(description="Full multi-sentence plain-text summary.")
+    highlights: list[str] = Field(
+        description="Ordered factual sub-statements the narrative is built from, suitable for"
+        " rendering as a bullet list."
+    )
+
+
 # --- Settings ------------------------------------------------------------------------------------
 
 
