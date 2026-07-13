@@ -352,6 +352,7 @@ cases beyond the standard `500 internal_error`.
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/reports/summary` | Aggregate completed entries over a week/month/quarter. |
+| GET | `/reports/narrative` | Rule-based plain-language narrative summary of a week/month/quarter. |
 
 ### `GET /reports/summary`
 
@@ -391,6 +392,39 @@ nearest whole minute) — never trusted from the client.
     entry** within the period, ascending by date. Days with zero entries are omitted entirely
     (not zero-filled) — the frontend is responsible for filling gaps if it needs a dense
     day-by-day series (e.g. for a calendar heatmap).
+- `422 validation_error` → unrecognized `period` value, malformed `date`.
+
+### `GET /reports/narrative`
+
+Query params: identical to `GET /reports/summary` (`period: ReportPeriod` required, `date: date |
+None` optional, same period-resolution rules). Internally calls `get_reports_summary` (the same
+aggregation `GET /reports/summary` uses) and derives every number in the narrative from the
+resulting `ReportSummaryResponse` in pure Python — no separate SQL/date math, no LLM or other
+external call; the narrative is fully rule-based and deterministic for a given summary.
+
+- `200` → `ReportNarrativeResponse`:
+  - `period`, `start_date`, `end_date`, `timezone` — echoed from the underlying
+    `ReportSummaryResponse`.
+  - `narrative: str` — a short multi-sentence plain-text paragraph.
+  - `highlights: list[str]` — the ordered factual statements the narrative is built from, for a UI
+    to render as a bullet list.
+
+  Narrative composition rules, applied in order:
+  1. **Empty period** (`entry_count == 0`): narrative/`highlights` state only that no time was
+     tracked for the period plus its date range; none of the rules below apply.
+  2. **Total**: total tracked time (`total_minutes`, rendered `"Hh Mm"`) and `entry_count`.
+  3. **Top category**: the highest `by_category` row (name, or "Uncategorized" if `category` is
+     `null`) with its time and share of `total_minutes` (rounded to a whole percent); if a second
+     category exists, it is mentioned too.
+  4. **Busiest day**: the `by_day` row with the largest `total_minutes` — weekday name, date, and
+     its time.
+  5. **Daily average**: `total_minutes` divided by the number of days present in `by_day` (i.e.
+     per **active** day, not per calendar day in the period), rendered `"Hh Mm"`.
+  6. **Top tag**: if `by_tag` is non-empty, the top tag's name and time (phrased neutrally, since
+     `by_tag` minutes may double-count across an entry's tags — see `GET /reports/summary`).
+
+  All figures are computed server-side from the `ReportSummaryResponse` fields only — nothing is
+  echoed from client input.
 - `422 validation_error` → unrecognized `period` value, malformed `date`.
 
 ---

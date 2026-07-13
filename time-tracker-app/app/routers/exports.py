@@ -25,7 +25,7 @@ from app.repo import (
     get_tags_for_entry,
     local_range_bounds_utc,
 )
-from app.routers.reports import get_reports_summary
+from app.routers.reports import format_minutes, get_reports_summary
 from app.schemas import ReportPeriod, ReportSummaryResponse
 
 router = APIRouter(prefix="/exports", tags=["exports"])
@@ -44,12 +44,6 @@ def _get_database_label(db: sqlite3.Connection) -> str:
     row = db.execute("SELECT database_label FROM settings LIMIT 1").fetchone()
     label: str = row["database_label"] if row is not None else "time-tracker"
     return label
-
-
-def _format_minutes(total_minutes: int) -> str:
-    """Render whole minutes as ``"Hh Mm"`` (e.g. ``90`` -> ``"1h 30m"``)."""
-    hours, minutes = divmod(int(total_minutes), 60)
-    return f"{hours}h {minutes}m"
 
 
 @router.get("/backup")
@@ -200,17 +194,17 @@ def _render_report_html(summary: ReportSummaryResponse) -> str:
     category_rows = [
         [
             escape(row.category.name) if row.category is not None else "(none)",
-            _format_minutes(row.total_minutes),
+            format_minutes(row.total_minutes),
             str(row.entry_count),
         ]
         for row in summary.by_category
     ]
     tag_rows = [
-        [escape(row.tag.name), _format_minutes(row.total_minutes), str(row.entry_count)]
+        [escape(row.tag.name), format_minutes(row.total_minutes), str(row.entry_count)]
         for row in summary.by_tag
     ]
     day_rows = [
-        [row.date.isoformat(), _format_minutes(row.total_minutes), str(row.entry_count)]
+        [row.date.isoformat(), format_minutes(row.total_minutes), str(row.entry_count)]
         for row in summary.by_day
     ]
 
@@ -220,7 +214,7 @@ def _render_report_html(summary: ReportSummaryResponse) -> str:
             f'<p style="{heading_style}">Time Tracker Report &mdash; {escape(period_label)}</p>',
             f'<p style="{subheading_style}">{summary.start_date.isoformat()} to '
             f"{summary.end_date.isoformat()} ({escape(summary.timezone)})</p>",
-            f'<p style="{subheading_style}">Total: {_format_minutes(summary.total_minutes)} '
+            f'<p style="{subheading_style}">Total: {format_minutes(summary.total_minutes)} '
             f"across {summary.entry_count} {entry_word}</p>",
             f'<p style="{section_heading_style}">By category</p>',
             _table(["Category", "Time", "Entries"], category_rows, "No entries."),

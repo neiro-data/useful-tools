@@ -15,12 +15,19 @@ from app.repo import category_from_row, get_settings_timezone, local_range_bound
 from app.schemas import (
     ReportCategoryBreakdown,
     ReportDayBreakdown,
+    ReportNarrativeResponse,
     ReportPeriod,
     ReportSummaryResponse,
     ReportTagBreakdown,
 )
 
 router = APIRouter(prefix="/reports", tags=["reports"])
+
+
+def format_minutes(total_minutes: int) -> str:
+    """Render whole minutes as ``"Hh Mm"`` (e.g. ``90`` -> ``"1h 30m"``)."""
+    hours, minutes = divmod(int(total_minutes), 60)
+    return f"{hours}h {minutes}m"
 
 
 @dataclass
@@ -179,4 +186,143 @@ def get_reports_summary(
         by_category=category_breakdown,
         by_tag=tag_breakdown,
         by_day=day_breakdown,
+    )
+
+
+def _build_narrative(summary: ReportSummaryResponse) -> tuple[str, list[str]]:
+    """Derive a rule-based, plain-language narrative (and its ordered factual ``highlights``)
+    purely from ``summary``'s already-computed aggregates. No I/O, no external calls."""
+    period_label = summary.period.value
+
+    if summary.entry_count == 0:
+        highlight = (
+            f"No time tracked for this {period_label} ({summary.start_date.isoformat()} to "
+            f"{summary.end_date.isoformat()})."
+        )
+        return highlight, [highlight]
+
+    highlights: list[str] = []
+
+    entry_word = "entry" if summary.entry_count == 1 else "entries"
+    highlights.append(
+        f"Total: {format_minutes(summary.total_minutes)} across {summary.entry_count} {entry_word}"
+    )
+
+    if summary.by_category:
+        top_category = summary.by_category[0]
+        top_category_name = (
+            top_category.category.name if top_category.category is not None else "Uncategorized"
+        )
+        top_share = (
+            round(100 * top_category.total_minutes / summary.total_minutes)
+            if summary.total_minutes
+            else 0
+        )
+        highlights.append(
+            f"Top category: {top_category_name} "
+            f"({format_minutes(top_category.total_minutes)}, {top_share}%)"
+        )
+        if len(summary.by_category) >= 2:
+            second_category = summary.by_category[1]
+            second_category_name = (
+                second_category.category.name
+                if second_category.category is not None
+                else "Uncategorized"
+            )
+            highlights.append(
+                f"Second category: {second_category_name} "
+                f"({format_minutes(second_category.total_minutes)})"
+            )
+
+    if summary.by_day:
+        busiest_day = max(summary.by_day, key=lambda row: row.total_minutes)
+        weekday_name = busiest_day.date.strftime("%A")
+        highlights.append(
+            f"Busiest day: {weekday_name}, {busiest_day.date.isoformat()} "
+            f"({format_minutes(busiest_day.total_minutes)})"
+        )
+
+        daily_average_minutes = round(summary.total_minutes / len(summary.by_day))
+        highlights.append(f"Daily average: {format_minutes(daily_average_minutes)} per active day")
+
+    if summary.by_tag:
+        top_tag = summary.by_tag[0]
+        highlights.append(
+            f"Most-used tag: {top_tag.tag.name} "
+            f"({format_minutes(top_tag.total_minutes)} across tagged entries)"
+        )
+
+    narrative = (
+        f"You tracked {format_minutes(summary.total_minutes)} across {summary.entry_count} "
+        f"{entry_word} this {period_label} ({summary.start_date.isoformat()} to "
+        f"{summary.end_date.isoformat()})."
+    )
+    if summary.by_category:
+        top_category = summary.by_category[0]
+        top_category_name = (
+            top_category.category.name if top_category.category is not None else "Uncategorized"
+        )
+        top_share = (
+            round(100 * top_category.total_minutes / summary.total_minutes)
+            if summary.total_minutes
+            else 0
+        )
+        narrative += (
+            f" Most of your time went to {top_category_name} "
+            f"({format_minutes(top_category.total_minutes)}, {top_share}%)"
+        )
+        if len(summary.by_category) >= 2:
+            second_category = summary.by_category[1]
+            second_category_name = (
+                second_category.category.name
+                if second_category.category is not None
+                else "Uncategorized"
+            )
+            narrative += (
+                f", followed by {second_category_name} "
+                f"({format_minutes(second_category.total_minutes)})."
+            )
+        else:
+            narrative += "."
+    if summary.by_day:
+        busiest_day = max(summary.by_day, key=lambda row: row.total_minutes)
+        weekday_name = busiest_day.date.strftime("%A")
+        daily_average_minutes = round(summary.total_minutes / len(summary.by_day))
+        narrative += (
+            f" {weekday_name} ({busiest_day.date.isoformat()}) was your busiest day at "
+            f"{format_minutes(busiest_day.total_minutes)}. You averaged "
+            f"{format_minutes(daily_average_minutes)} per active day."
+        )
+    if summary.by_tag:
+        top_tag = summary.by_tag[0]
+        narrative += (
+            f" Most-used tag: {top_tag.tag.name} "
+            f"({format_minutes(top_tag.total_minutes)} across tagged entries)."
+        )
+
+    return narrative, highlights
+
+
+@router.get("/narrative", response_model=ReportNarrativeResponse)
+def get_reports_narrative(
+    db: DbDep,
+    period: ReportPeriod,
+    date: date | None = None,
+) -> ReportNarrativeResponse:
+    """Rule-based (no LLM, no external calls), plain-language narrative summary of the
+    week/month/quarter containing ``date``.
+
+    Reuses ``get_reports_summary``'s aggregation (no separate SQL/date math) and derives every
+    number in the narrative from the resulting ``ReportSummaryResponse`` in pure Python.
+    """
+    summary = get_reports_summary(db, period, date)
+    narrative, highlights = _build_narrative(summary)
+
+    return ReportNarrativeResponse(
+        period=summary.period,
+        start_date=summary.start_date,
+        end_date=summary.end_date,
+        timezone=summary.timezone,
+        narrative=narrative,
+        highlights=highlights,
     )
