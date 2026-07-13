@@ -14,15 +14,14 @@ const NAV_ITEMS: NavItem[] = [
   { to: "/week", label: "Week", icon: "📅" },
   { to: "/month", label: "Month", icon: "🗓" },
   { to: "/reports", label: "Reports", icon: "📊" },
-  { to: "/settings", label: "Settings", icon: "⚙", disabled: true },
+  { to: "/settings", label: "Settings", icon: "⚙" },
 ];
 
 interface AppShellProps {
   children: ReactNode;
 }
 
-/** Persistent left nav rail + centered content column (`design/DESIGN_SYSTEM.md` §2). Settings is
- * a disabled placeholder reserved for a later phase. */
+/** Persistent left nav rail + centered content column (`design/DESIGN_SYSTEM.md` §2). */
 export function AppShell({ children }: AppShellProps): ReactElement {
   return (
     <div className={styles.shell}>
