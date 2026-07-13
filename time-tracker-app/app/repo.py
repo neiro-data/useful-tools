@@ -12,7 +12,7 @@ from datetime import UTC, date, datetime, time
 from zoneinfo import ZoneInfo
 
 from app.errors import NotFoundError
-from app.schemas import CategoryRead, EntryRead, TagRead
+from app.schemas import CategoryRead, EntryRead, SettingsRead, TagRead
 
 # --- Timestamps -----------------------------------------------------------------------------
 
@@ -104,6 +104,17 @@ def category_from_row(row: sqlite3.Row) -> CategoryRead:
 
 def tag_from_row(row: sqlite3.Row) -> TagRead:
     return TagRead(id=row["id"], name=row["name"], is_active=bool(row["is_active"]))
+
+
+def settings_from_row(row: sqlite3.Row) -> SettingsRead:
+    return SettingsRead(
+        id=row["id"],
+        default_entry_mode=row["default_entry_mode"],
+        week_starts_on=row["week_starts_on"],
+        default_export_format=row["default_export_format"],
+        database_label=row["database_label"],
+        timezone=row["timezone"],
+    )
 
 
 def get_category_row(db: sqlite3.Connection, category_id: int) -> sqlite3.Row | None:

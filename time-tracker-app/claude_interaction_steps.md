@@ -185,3 +185,31 @@ Phase 1 — review fixes: generic 500 envelope handler + documented DELETE-cance
   call in entries.py; N+1 tag lookup in reports.py) — deferred.
 
 **Agents:** backend-developer (impl), test-automator (tests), code-reviewer (review). All edits on Sonnet.
+
+## Phase 2 — Task 2: Settings API (GET/PATCH singleton settings)
+
+**Branch:** `feat/settings-api` (PR flow — branch → PR → human review; no direct-to-main).
+
+- New `app/routers/settings.py` (registered in `app/api.py`): `GET /settings` returns the singleton
+  settings row; `PATCH /settings` partially updates it (`exclude_unset`, empty body = no-op).
+  The row is treated as a singleton — PATCH only ever `UPDATE`s the single row (never insert/delete),
+  and builds a parameterized dynamic `UPDATE` restricted to a fixed `_MUTABLE_COLUMNS` allowlist
+  (column names never from user input; values always `?`-bound), inside `transaction(db)` (BEGIN
+  IMMEDIATE) matching `entries.update_entry`.
+- `app/schemas.py`: added `SettingsRead` / `SettingsUpdate` models + new `WeekStart`
+  (`monday`/`sunday`) and `ExportFormat` (`html`/`csv`/`pdf`/`md`) str enums whose values match the
+  DB `CHECK` constraints exactly; reused `EntryMode` for `default_entry_mode`. `database_label`
+  strip-and-reject-blank via field validator.
+- Validation: `timezone` must be a valid IANA zone (checked via `zoneinfo.ZoneInfo`, raising the
+  app's `ValidationError` → 422 envelope) — critical since timezone drives day-boundary math.
+- `app/repo.py`: added `settings_from_row(row) -> SettingsRead` helper. `API_CONTRACT.md`: new
+  `## Settings` section documenting both endpoints, singleton semantics, and the IANA-tz rule.
+- Tests: `tests/test_settings.py` — 11 new (GET defaults, single/multi-field PATCH, empty-body
+  no-op, invalid-timezone/blank-label/enum 422s, singleton invariant across patches, tz round-trip).
+  Suite: 81 passing (70 + 11).
+- Verified: `ruff format`/`ruff check`/`mypy app` clean; full `pytest` green (81).
+- Code review: no blocking issues. Non-blocking notes: `week_starts_on` lacks a DB CHECK (app-level
+  enum is sole write path); `_get_settings_row` assert is an intentional non-user-facing invariant
+  guard. Deferred.
+
+**Agents:** backend-developer (impl), test-automator (tests), code-reviewer (review). All edits on Sonnet.

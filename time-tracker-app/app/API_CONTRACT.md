@@ -392,3 +392,43 @@ nearest whole minute) — never trusted from the client.
     (not zero-filled) — the frontend is responsible for filling gaps if it needs a dense
     day-by-day series (e.g. for a calendar heatmap).
 - `422 validation_error` → unrecognized `period` value, malformed `date`.
+
+---
+
+## Settings
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/settings` | Get the current (singleton) settings. |
+| PATCH | `/settings` | Partially update the singleton settings. |
+
+`settings` is a **singleton** table (see `app/schema.py`'s `_seed_default_settings`): exactly one
+row exists at all times, seeded at DB init with `('timer', 'monday', 'md', <app_name>, 'UTC')`.
+These endpoints only ever read or update that single row — there is no `POST`/`DELETE` and no
+`{settings_id}` path segment; rows are never created or destroyed via the API.
+
+### `GET /settings`
+
+- `200` → `SettingsRead` (`id`, `default_entry_mode`, `week_starts_on`, `default_export_format`,
+  `database_label`, `timezone`).
+
+### `PATCH /settings`
+
+Body: `SettingsUpdate` (all fields optional: `default_entry_mode`, `week_starts_on`,
+`default_export_format`, `database_label`, `timezone`). Partial-update semantics — only fields
+present in the body are applied; an empty body is a no-op that returns the current settings
+unchanged. `id` is server-owned and never client-settable.
+
+- `default_entry_mode` — `"timer" | "manual"`, matching the `entries.entry_mode` `CHECK`.
+- `week_starts_on` — `"monday" | "sunday"`.
+- `default_export_format` — `"html" | "csv" | "pdf" | "md"`, matching the `report_exports.format`
+  `CHECK`.
+- `database_label` — non-empty after stripping surrounding whitespace.
+- `timezone` — **must be a valid IANA zone name** (validated via `zoneinfo.ZoneInfo`); an unknown
+  zone is rejected rather than stored, since `settings.timezone` drives day-boundary math
+  throughout the app (`/today`, `/reports/summary`, `/entries` date-range filtering).
+
+- `200` → updated `SettingsRead`.
+- `422 validation_error` → invalid enum value for `default_entry_mode`/`week_starts_on`/
+  `default_export_format`, blank `database_label`, or an unrecognized `timezone` (e.g.
+  `"Not/AZone"`).

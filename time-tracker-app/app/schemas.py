@@ -22,7 +22,7 @@ from datetime import date, datetime
 from enum import StrEnum
 from typing import Annotated, Any
 
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # --- Shared / cross-cutting -----------------------------------------------------------------
 
@@ -459,3 +459,76 @@ class ReportSummaryResponse(BaseModel):
         description="One entry per local day that has at least one completed entry, ascending"
         " by date."
     )
+
+
+# --- Settings ------------------------------------------------------------------------------------
+
+
+class WeekStart(StrEnum):
+    """Which weekday a week is considered to start on, for period resolution/display."""
+
+    MONDAY = "monday"
+    SUNDAY = "sunday"
+
+
+class ExportFormat(StrEnum):
+    """Default report export format. Values match ``settings.default_export_format``'s DB
+    ``CHECK`` constraint (see ``app/schema.py``) so a schema-valid value can never violate it."""
+
+    HTML = "html"
+    CSV = "csv"
+    PDF = "pdf"
+    MD = "md"
+
+
+class SettingsUpdate(BaseModel):
+    """Request body for ``PATCH /settings``. Partial update semantics: only fields explicitly
+    present in the request payload are applied. ``id`` is server-owned and never client-settable."""
+
+    model_config = ConfigDict(
+        json_schema_extra={"example": {"timezone": "Europe/Lisbon", "week_starts_on": "monday"}}
+    )
+
+    default_entry_mode: EntryMode | None = None
+    week_starts_on: WeekStart | None = None
+    default_export_format: ExportFormat | None = None
+    database_label: NonEmptyStr | None = None
+    timezone: Annotated[str, Field(min_length=1, max_length=100)] | None = None
+
+    @field_validator("database_label")
+    @classmethod
+    def _strip_and_require_non_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("database_label must not be blank")
+        return stripped
+
+
+class SettingsRead(BaseModel):
+    """Response representation of the singleton ``settings`` row.
+
+    There is always exactly one row (seeded at DB init, see ``app/schema.py``'s
+    ``_seed_default_settings``); it is never created or deleted via the API, only read/updated.
+    """
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "id": 1,
+                "default_entry_mode": "timer",
+                "week_starts_on": "monday",
+                "default_export_format": "md",
+                "database_label": "time-tracker",
+                "timezone": "UTC",
+            }
+        }
+    )
+
+    id: int
+    default_entry_mode: EntryMode
+    week_starts_on: WeekStart
+    default_export_format: ExportFormat
+    database_label: str
+    timezone: str
