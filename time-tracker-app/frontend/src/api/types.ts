@@ -182,6 +182,27 @@ export interface ReportNarrativeResponse {
   highlights: string[];
 }
 
+export type WeekStart = "monday" | "sunday";
+
+export type ExportFormat = "html" | "csv" | "pdf" | "md";
+
+export interface SettingsRead {
+  id: number;
+  default_entry_mode: EntryMode;
+  week_starts_on: WeekStart;
+  default_export_format: ExportFormat;
+  database_label: string;
+  timezone: string;
+}
+
+export interface SettingsUpdate {
+  default_entry_mode?: EntryMode;
+  week_starts_on?: WeekStart;
+  default_export_format?: ExportFormat;
+  database_label?: string;
+  timezone?: string;
+}
+
 /** Stable, machine-readable error codes the frontend can branch on (see API_CONTRACT.md). */
 export type ApiErrorCode =
   | "bad_request"
