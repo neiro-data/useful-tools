@@ -297,3 +297,22 @@ Phase 1 — review fixes: generic 500 envelope handler + documented DELETE-cance
 - Verified: `ruff check .` clean, `mypy app` clean (19 files), full `pytest` green (98 = 97 + 1).
 
 **Agents:** python-pro (impl + test). All edits on Sonnet.
+
+## Post-Phase-2 cleanup — T2: DRY refactor of `_build_narrative` (reports.py)
+
+**Branch:** `refactor/narrative-builder` (PR flow — branch → PR → human review; no direct-to-main).
+
+- **Why:** `_build_narrative` (`app/routers/reports.py`) computed its derived values twice — once
+  for the ordered `highlights` list and again for the prose `narrative` string. Flagged as a
+  non-blocking DRY note during the Task 4 narrative review.
+- **What:** compute each derived value once (top-category name + `top_share`, second-category name,
+  busiest-day `weekday_name`, `daily_average_minutes`) in the highlights block; the narrative block
+  now reuses those locals instead of recomputing the `Uncategorized` fallback / share math /
+  `strftime` / average division. Pre-initialized to `""`/`0` before the guarded blocks (never read
+  when the same `if` guard is false, so output is unchanged). Structure, ordering, guards, and the
+  `else: narrative += "."` punctuation branch are untouched.
+- **Byte-identical output** was the hard constraint — pure de-duplication, no wording change.
+- Verified: `ruff check .` clean, `mypy app` clean (19 files), full `pytest` green (98). Narrative
+  tests (`tests/test_narrative.py`) still pass unchanged, confirming identical prose.
+
+**Agents:** python-pro (impl). All edits on Sonnet.

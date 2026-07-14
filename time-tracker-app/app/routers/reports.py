@@ -208,6 +208,9 @@ def _build_narrative(summary: ReportSummaryResponse) -> tuple[str, list[str]]:
         f"Total: {format_minutes(summary.total_minutes)} across {summary.entry_count} {entry_word}"
     )
 
+    top_category_name = ""
+    top_share = 0
+    second_category_name = ""
     if summary.by_category:
         top_category = summary.by_category[0]
         top_category_name = (
@@ -234,6 +237,8 @@ def _build_narrative(summary: ReportSummaryResponse) -> tuple[str, list[str]]:
                 f"({format_minutes(second_category.total_minutes)})"
             )
 
+    weekday_name = ""
+    daily_average_minutes = 0
     if summary.by_day:
         busiest_day = max(summary.by_day, key=lambda row: row.total_minutes)
         weekday_name = busiest_day.date.strftime("%A")
@@ -259,25 +264,12 @@ def _build_narrative(summary: ReportSummaryResponse) -> tuple[str, list[str]]:
     )
     if summary.by_category:
         top_category = summary.by_category[0]
-        top_category_name = (
-            top_category.category.name if top_category.category is not None else "Uncategorized"
-        )
-        top_share = (
-            round(100 * top_category.total_minutes / summary.total_minutes)
-            if summary.total_minutes
-            else 0
-        )
         narrative += (
             f" Most of your time went to {top_category_name} "
             f"({format_minutes(top_category.total_minutes)}, {top_share}%)"
         )
         if len(summary.by_category) >= 2:
             second_category = summary.by_category[1]
-            second_category_name = (
-                second_category.category.name
-                if second_category.category is not None
-                else "Uncategorized"
-            )
             narrative += (
                 f", followed by {second_category_name} "
                 f"({format_minutes(second_category.total_minutes)})."
@@ -286,8 +278,6 @@ def _build_narrative(summary: ReportSummaryResponse) -> tuple[str, list[str]]:
             narrative += "."
     if summary.by_day:
         busiest_day = max(summary.by_day, key=lambda row: row.total_minutes)
-        weekday_name = busiest_day.date.strftime("%A")
-        daily_average_minutes = round(summary.total_minutes / len(summary.by_day))
         narrative += (
             f" {weekday_name} ({busiest_day.date.isoformat()}) was your busiest day at "
             f"{format_minutes(busiest_day.total_minutes)}. You averaged "
