@@ -193,8 +193,13 @@ export function SettingsPage(): ReactElement {
               value={form.database_label}
               onChange={(event) => updateField("database_label", event.target.value)}
               aria-invalid={labelBlank}
+              aria-describedby={labelBlank ? "settings-database-label-hint" : undefined}
             />
-            {labelBlank && <p className={styles.fieldHint}>Database label cannot be blank.</p>}
+            {labelBlank && (
+              <p id="settings-database-label-hint" className={styles.fieldHint}>
+                Database label cannot be blank.
+              </p>
+            )}
           </div>
 
           <div className={styles.field}>
@@ -209,8 +214,13 @@ export function SettingsPage(): ReactElement {
               value={form.timezone}
               onChange={(event) => updateField("timezone", event.target.value)}
               aria-invalid={timezoneBlank}
+              aria-describedby={timezoneBlank ? "settings-timezone-hint" : undefined}
             />
-            {timezoneBlank && <p className={styles.fieldHint}>Timezone cannot be blank.</p>}
+            {timezoneBlank && (
+              <p id="settings-timezone-hint" className={styles.fieldHint}>
+                Timezone cannot be blank.
+              </p>
+            )}
           </div>
 
           <div className={styles.actions}>

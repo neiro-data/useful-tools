@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getSettings, updateSettings } from "../api/settings";
 import type { SettingsRead, SettingsUpdate } from "../api/types";
 
@@ -15,25 +15,27 @@ export function useSettings(): {
   const [settings, setSettings] = useState<SettingsRead | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
 
   const reload = useCallback(async () => {
     setError(null);
     const response = await getSettings();
+    if (!mountedRef.current) return;
     setSettings(response);
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
+    mountedRef.current = true;
     setLoading(true);
     reload()
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load settings.");
+        if (mountedRef.current) setError(err instanceof Error ? err.message : "Failed to load settings.");
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (mountedRef.current) setLoading(false);
       });
     return () => {
-      cancelled = true;
+      mountedRef.current = false;
     };
   }, [reload]);
 

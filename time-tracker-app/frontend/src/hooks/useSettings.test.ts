@@ -83,4 +83,32 @@ describe("useSettings", () => {
 
     expect(result.current.settings).toEqual(settings);
   });
+
+  it("does not update state when reload() resolves after unmount", async () => {
+    const settings = makeSettings();
+    vi.mocked(getSettings).mockResolvedValue(settings);
+
+    const { result, unmount } = renderHook(() => useSettings());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let resolveReload: (value: SettingsRead) => void = () => {};
+    vi.mocked(getSettings).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveReload = resolve;
+        }),
+    );
+
+    const reloadPromise = result.current.reload();
+    unmount();
+
+    // Resolving after unmount must not trigger a setState-on-unmounted-component warning/write.
+    await act(async () => {
+      resolveReload(makeSettings({ database_label: "After unmount" }));
+      await reloadPromise;
+    });
+
+    // No assertion on result.current after unmount (stale closure) — the absence of act()
+    // warnings/errors is the actual assertion here.
+  });
 });

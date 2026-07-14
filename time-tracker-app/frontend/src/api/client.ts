@@ -7,7 +7,7 @@ import type { ApiErrorCode, ErrorResponse } from "./types";
  * hardcoded origin baked into the bundle. Override via `VITE_API_BASE_URL` if needed (e.g. a
  * built/served bundle pointed at a non-default backend origin).
  */
-const API_PREFIX = "/api";
+export const API_PREFIX = "/api";
 
 type QueryValue = string | number | boolean | undefined | null;
 type QueryParams = Record<string, QueryValue>;

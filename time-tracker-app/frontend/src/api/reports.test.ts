@@ -15,6 +15,7 @@ import {
  */
 vi.mock("./client", () => ({
   apiRequest: vi.fn(),
+  API_PREFIX: "/api",
 }));
 
 describe("getReportSummary", () => {

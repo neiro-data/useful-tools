@@ -1,4 +1,4 @@
-import { apiRequest } from "./client";
+import { API_PREFIX, apiRequest } from "./client";
 import type { ReportNarrativeResponse, ReportPeriod, ReportSummaryResponse } from "./types";
 
 export function getReportSummary(period: ReportPeriod, date?: string): Promise<ReportSummaryResponse> {
@@ -17,14 +17,14 @@ export function getReportNarrative(period: ReportPeriod, date?: string): Promise
 export function getReportHtmlExportUrl(period: ReportPeriod, date?: string): string {
   const params = new URLSearchParams({ period });
   if (date) params.set("date", date);
-  return `/api/exports/report.html?${params.toString()}`;
+  return `${API_PREFIX}/exports/report.html?${params.toString()}`;
 }
 
 export function getEntriesCsvExportUrl(startDate: string, endDate: string): string {
   const params = new URLSearchParams({ start_date: startDate, end_date: endDate });
-  return `/api/exports/entries.csv?${params.toString()}`;
+  return `${API_PREFIX}/exports/entries.csv?${params.toString()}`;
 }
 
 export function getBackupExportUrl(): string {
-  return "/api/exports/backup";
+  return `${API_PREFIX}/exports/backup`;
 }

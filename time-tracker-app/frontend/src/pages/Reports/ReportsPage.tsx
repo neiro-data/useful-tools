@@ -132,6 +132,7 @@ export function ReportsPage(): ReactElement {
                 type="button"
                 className={styles.dateAnchorReset}
                 onClick={() => setDateAnchor(undefined)}
+                aria-label="Reset date to today"
               >
                 Today
               </button>

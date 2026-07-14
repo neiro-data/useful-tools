@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { listEntries } from "../api/entries";
 import type { EntryRead } from "../api/types";
 
@@ -19,6 +19,7 @@ export function usePeriodEntries(
   const [entries, setEntries] = useState<EntryRead[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const mountedRef = useRef(true);
 
   const reload = useCallback(async () => {
     setError(null);
@@ -30,21 +31,22 @@ export function usePeriodEntries(
       offset += PAGE_SIZE;
       if (offset >= page.total) break;
     }
+    if (!mountedRef.current) return;
     setEntries(all);
   }, [startDate, endDate]);
 
   useEffect(() => {
-    let cancelled = false;
+    mountedRef.current = true;
     setLoading(true);
     reload()
       .catch((err) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load entries.");
+        if (mountedRef.current) setError(err instanceof Error ? err.message : "Failed to load entries.");
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (mountedRef.current) setLoading(false);
       });
     return () => {
-      cancelled = true;
+      mountedRef.current = false;
     };
   }, [reload]);
 
