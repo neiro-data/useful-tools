@@ -1,4 +1,4 @@
-import { renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { useReportSummary } from "./useReportSummary";
 import { getReportNarrative, getReportSummary } from "../api/reports";
@@ -79,5 +79,30 @@ describe("useReportSummary", () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
 
     expect(result.current.error).toBe("Network down");
+  });
+
+  it("does not update state when reload() resolves after unmount", async () => {
+    vi.mocked(getReportSummary).mockResolvedValue(makeSummary());
+    vi.mocked(getReportNarrative).mockResolvedValue(makeNarrative());
+
+    const { result, unmount } = renderHook(() => useReportSummary("week"));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let resolveSummary: (value: ReportSummaryResponse) => void = () => {};
+    vi.mocked(getReportSummary).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSummary = resolve;
+        }),
+    );
+
+    const reloadPromise = result.current.reload();
+    unmount();
+
+    // Resolving after unmount must not trigger a setState-on-unmounted-component warning/write.
+    await act(async () => {
+      resolveSummary(makeSummary({ total_minutes: 999 }));
+      await reloadPromise;
+    });
   });
 });

@@ -316,3 +316,40 @@ Phase 1 — review fixes: generic 500 envelope handler + documented DELETE-cance
   tests (`tests/test_narrative.py`) still pass unchanged, confirming identical prose.
 
 **Agents:** python-pro (impl). All edits on Sonnet.
+
+## Post-Phase-2 cleanup — T3+T4+T5 batched (frontend)
+
+**Branch:** `frontend/reports-settings-cleanup` (PR flow — branch → PR → human review; no direct-to-main).
+Three non-overlapping frontend cleanups batched into one PR (plan allowed batching the frontend tasks).
+
+### T3 — hook `cancelled`-guard in `reload()` (correctness)
+- **Why:** in `useReportSummary`/`useSettings`/`usePeriodEntries`, the effect's `cancelled` flag only
+  guarded `setError`/`setLoading` — NOT the `setState` calls inside `reload()`. A `reload()` resolving
+  after unmount wrote state on an unmounted component.
+- **Fix:** replaced the per-effect `cancelled` local with a shared `mountedRef` (`useRef(true)`) in all
+  three hooks; `reload()` checks `mountedRef.current` before each setState. Ref is set `true` at effect
+  entry (so dep-change re-subscribe re-arms it) and `false` in cleanup. Public `reload(): Promise<void>`
+  signature unchanged. Consistent across all three hooks.
+- **Tests:** unmount-before-resolve test added to `useReportSummary.test.ts`, `useSettings.test.ts`, and a
+  new `usePeriodEntries.test.ts` — assert no state write / act warning after unmount.
+- **Known residual (non-blocking):** the shared ref can't distinguish "unmounted" from "superseded by a
+  newer period/date", so a rapid dep-switch could still write stale *data*. That race pre-existed (the old
+  `reload` had no guard at all); this is strictly an improvement. A request-token/AbortController per
+  effect would fully close it — deferred.
+
+### T4 — a11y polish
+- Settings: gave the (validation) hint `<p>`s stable ids + wired `aria-describedby` on the matching input
+  (conditional, only when the hint renders). Reports: added `aria-label="Reset date to today"` to the date
+  anchor's "Today" reset button. `MiniBarChart`: for ranges > 7 days, labels switch from repeating weekday
+  names to date labels (`formatShortDate`, e.g. "Jul 3") and are thinned (~8 evenly spaced, last always
+  shown); ≤7-day Week behavior visually unchanged. Added `formatShortDate` to `utils/dateRange.ts`.
+
+### T5 — extract `API_PREFIX` constant
+- `export`ed the existing `API_PREFIX = "/api"` from `api/client.ts`; `api/reports.ts`'s three export-URL
+  builders now use it instead of a hardcoded `/api`. Runtime URLs byte-identical. Updated `reports.test.ts`'s
+  `vi.mock("./client", …)` factory to also expose `API_PREFIX` (mock previously only stubbed `apiRequest`).
+
+- Verified (in `frontend/`): `npm run lint` clean, `npx tsc --noEmit` clean, `npx vitest run` green
+  (51 tests, 11 files).
+
+**Agents:** react-specialist (T3), frontend-developer (T4+T5). All edits on Sonnet.

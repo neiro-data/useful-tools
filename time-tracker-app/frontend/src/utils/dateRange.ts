@@ -78,6 +78,14 @@ export function formatWeekdayShort(isoDate: string): string {
   return WEEKDAY_SHORT[date.getDay()] ?? "";
 }
 
+/** e.g. `"Jul 7"` — a compact date label used when a range is too long for repeating weekday
+ * names to stay unambiguous (e.g. `MiniBarChart` over a month/quarter). */
+export function formatShortDate(isoDate: string): string {
+  const date = new Date(`${isoDate}T00:00:00`);
+  const month = date.toLocaleDateString(undefined, { month: "short" });
+  return `${month} ${date.getDate()}`;
+}
+
 /** e.g. `"Jul 7 – 13"` for the Week header, or `"Jul 7 – Aug 2"` if the range spans months. */
 export function formatWeekHeading(range: DateRange): string {
   const startMonth = range.start.toLocaleDateString(undefined, { month: "short" });
