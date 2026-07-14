@@ -278,3 +278,22 @@ Phase 1 — review fixes: generic 500 envelope handler + documented DELETE-cance
   opportunity (build highlights first, reuse). Deferred.
 
 **Agents:** python-pro (impl), test-automator (tests), code-reviewer (review). All edits on Sonnet.
+
+## Post-Phase-2 cleanup — T1: CSV formula-injection guard (SECURITY)
+
+**Branch:** `fix/csv-formula-injection` (PR flow — branch → PR → human review; no direct-to-main).
+
+- **Why:** `GET /exports/entries.csv` wrote user-controlled string fields unescaped; a cell value
+  starting with `= + - @` (or tab/CR) can execute as a formula when the CSV is opened in
+  Excel/Sheets (OWASP CSV injection). Flagged as a non-blocking note during the Task 3 export review.
+- **Fix (`app/routers/exports.py`):** added module-level `_CSV_FORMULA_PREFIXES = ("=","+","-","@","\t","\r")`
+  and a `_csv_safe(value)` helper that prefixes at-risk strings with a single quote `'`; non-string
+  values and empty strings pass through unchanged. Applied to the four user-supplied columns
+  (`title`, `category`, `tags`, `notes`); system-generated columns (`id`, `start_ts`, `end_ts`,
+  `duration_minutes`, `entry_mode`) left untouched. Header row unaffected.
+- **Test (`tests/test_exports.py`):** `test_export_entries_csv_neutralizes_formula_injection` —
+  seeds a tag/entry titled `=cmd()|'/C calc'!A0` + notes `=SUM(A1:A9)`, hits the endpoint, parses
+  the CSV, and asserts title/tags/notes come back `'`-prefixed while `duration_minutes` is unchanged.
+- Verified: `ruff check .` clean, `mypy app` clean (19 files), full `pytest` green (98 = 97 + 1).
+
+**Agents:** python-pro (impl + test). All edits on Sonnet.

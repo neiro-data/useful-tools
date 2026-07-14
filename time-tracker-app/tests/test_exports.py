@@ -166,6 +166,32 @@ def test_export_entries_csv_filters_by_date_range(client: TestClient) -> None:
     assert str(out_of_range) not in ids
 
 
+def test_export_entries_csv_neutralizes_formula_injection(client: TestClient) -> None:
+    tag_id = _make_tag(client, "=cmd()|'/C calc'!A0")
+    entry_id = _make_entry(
+        client,
+        "=cmd()|'/C calc'!A0",
+        "2026-07-13T10:00:00+00:00",
+        "2026-07-13T11:00:00+00:00",
+        tag_ids=[tag_id],
+    )
+    response = client.patch(f"/entries/{entry_id}", json={"notes": "=SUM(A1:A9)"})
+    assert response.status_code == 200
+
+    csv_response = client.get("/exports/entries.csv")
+
+    assert csv_response.status_code == 200
+    rows = _parse_csv(csv_response.content)
+    matching = [row for row in rows if row["id"] == str(entry_id)]
+    assert len(matching) == 1
+    row = matching[0]
+    assert row["title"] == "'=cmd()|'/C calc'!A0"
+    assert row["tags"] == "'=cmd()|'/C calc'!A0"
+    assert row["notes"] == "'=SUM(A1:A9)"
+    # normal values remain unchanged
+    assert row["duration_minutes"] == "60.0" or float(row["duration_minutes"]) == 60
+
+
 def test_export_entries_csv_end_date_before_start_date_is_validation_error(
     client: TestClient,
 ) -> None:

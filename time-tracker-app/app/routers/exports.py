@@ -39,6 +39,17 @@ def _safe_filename_slug(text: str) -> str:
     return slug or "export"
 
 
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_safe(value: object) -> object:
+    """Neutralize CSV formula injection (OWASP guidance): prefix strings that start with
+    ``= + - @`` or a tab/carriage-return with a single quote. Non-string values pass through."""
+    if isinstance(value, str) and value.startswith(_CSV_FORMULA_PREFIXES):
+        return f"'{value}"
+    return value
+
+
 def _get_database_label(db: sqlite3.Connection) -> str:
     """Read ``settings.database_label`` (falling back to a generic label if unset)."""
     row = db.execute("SELECT database_label FROM settings LIMIT 1").fetchone()
@@ -136,14 +147,14 @@ def export_entries_csv(
         writer.writerow(
             [
                 row["id"],
-                row["title"],
-                category_name,
+                _csv_safe(row["title"]),
+                _csv_safe(category_name),
                 row["start_ts"],
                 row["end_ts"],
                 row["duration_minutes"],
                 row["entry_mode"],
-                tag_names,
-                row["notes"] or "",
+                _csv_safe(tag_names),
+                _csv_safe(row["notes"] or ""),
             ]
         )
 
