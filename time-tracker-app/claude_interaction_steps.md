@@ -353,3 +353,46 @@ Three non-overlapping frontend cleanups batched into one PR (plan allowed batchi
   (51 tests, 11 files).
 
 **Agents:** react-specialist (T3), frontend-developer (T4+T5). All edits on Sonnet.
+
+## Branch `seed-categories-file` — declarative category seeding from TOML
+
+**Goal:** replace Step 1 of `How-to-guide.md` (create categories via `curl -X POST /categories`) with a
+version-controlled file in the repo, so the category taxonomy is reproducible on a fresh database.
+
+**Format decision:** TOML at `seed/categories.toml`. Chosen over JSON (no comments — and this is a
+hand-curated taxonomy that benefits from inline rationale) and YAML (would add a `pyyaml` dependency for
+one file). `tomllib` is stdlib on the project's `requires-python = ">=3.11"` floor, and TOML is already the
+repo's config language.
+
+**Sync semantics decision:** full-sync upsert, keyed on `categories.name` (already UNIQUE in
+`app/schema.py`). Rows in the file but not the DB are inserted; rows already present have `color`/
+`sort_order` updated to match the file. Nothing is ever deleted, so categories with entries attached can't
+be orphaned and UI-created categories survive a run.
+
+**Two deliberate design calls:**
+- `is_active` is NOT synced. Deactivation stays UI-owned — syncing it would resurrect a category the user
+  explicitly retired via `POST /categories/{id}/deactivate` on the next run.
+- NOT wired into `init_db` (unlike `_seed_default_settings`). Because the sync overwrites `color`/
+  `sort_order`, running it at startup would revert UI edits on every `--reload` restart. Explicit
+  `uv run python -m app.seed` instead, with `--file` and `--dry-run` flags.
+
+**Files:** `seed/categories.toml` (new, 4 starter categories), `app/seed.py` (new), `tests/test_seed.py`
+(new, 17 tests), `How-to-guide.md` (Step 1 rewritten; stale "0 categories" line corrected).
+
+**Validation reuse:** `load_seed_file` parses into `CategoryCreate` from `app/schemas.py` — the same model
+`POST /categories` uses — so the file is held to identical rules (non-empty name, color ≤32 chars,
+`sort_order >= 0`) rather than re-implementing checks. Duplicate names within the file are rejected
+explicitly, since they'd otherwise silently collapse via the upsert.
+
+**Verified:** `ruff format` + `ruff check` clean; `mypy app` strict clean (20 files); `pytest` 115 passed
+(17 new). End-to-end against the real DB: `--dry-run` → 4 inserted (no write), apply → 4 inserted, re-run →
+0 inserted / 4 updated (idempotent). `GET /api/categories` through the running Vite proxy returns all four
+with correct colors and `sort_order`.
+
+**Agents:** none — built inline per session instruction not to spawn agents unless asked.
+
+**Still open (unrelated, pre-existing):** `/today` intermittently renders "An unexpected error occurred."
+That string exists only at `app/main.py:89` (the catch-all 500 handler), but all three endpoints TodayPage
+calls return 200 to curl, so it was not reproducible from the shell. Needs the `logger.exception` traceback
+from the uvicorn terminal to diagnose. Not addressed by this branch — an empty category list was ruled out
+as the cause.
