@@ -9,7 +9,7 @@ applies it.
 
 Sync semantics
 --------------
-``categories.name`` is UNIQUE (see ``app/schema.py``), so it doubles as the match key for an
+``categories.name`` is UNIQUE (see ``app/db_schema.py``), so it doubles as the match key for an
 ``ON CONFLICT`` upsert: rows in the file but not the database are inserted, rows already present
 have their ``color``/``sort_order`` updated to match the file. Nothing is ever deleted, so a
 category that has entries attached can never be orphaned by a re-run.
@@ -33,7 +33,7 @@ from pathlib import Path
 from pydantic import ValidationError
 
 from app.db import get_connection
-from app.schema import init_db
+from app.db_schema import init_db
 from app.schemas import CategoryCreate
 
 DEFAULT_SEED_PATH = Path(__file__).resolve().parent.parent / "seed" / "categories.toml"

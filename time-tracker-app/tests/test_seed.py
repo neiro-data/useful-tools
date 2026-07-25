@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from app.schema import create_schema
+from app.db_schema import create_schema
 from app.seed import DEFAULT_SEED_PATH, SeedError, load_seed_file, sync_categories
 
 SAMPLE_TOML = """

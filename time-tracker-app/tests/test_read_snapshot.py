@@ -12,8 +12,8 @@ import pytest
 
 from app.config import get_settings
 from app.db import get_connection
+from app.db_schema import init_db
 from app.repo import read_snapshot
-from app.schema import init_db
 
 
 @pytest.fixture

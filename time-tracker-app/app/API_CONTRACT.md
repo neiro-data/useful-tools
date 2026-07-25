@@ -6,7 +6,7 @@ and the Pydantic models in `app/schemas.py`. Reports/exports are **Phase 2** and
 Base URL: `http://127.0.0.1:8000` (localhost only; no auth in Phase 1 — single-user, offline-first
 desktop use case). All request/response bodies are `application/json`. All timestamps are
 ISO-8601, UTC, with explicit offset (e.g. `2026-07-13T09:00:00+00:00`) — matching the storage
-format in `app/schema.py`.
+format in `app/db_schema.py`.
 
 ## Conventions
 
@@ -326,7 +326,7 @@ composing three requests — to keep the Today screen to one network round trip 
 resource-constrained localhost desktop client and to avoid the frontend re-implementing "what
 counts as today."
 
-"Today" boundary: resolved server-side using `settings.timezone` (see `app/schema.py`'s
+"Today" boundary: resolved server-side using `settings.timezone` (see `app/db_schema.py`'s
 `settings` table) applied to the server's current time, converted back to the UTC
 `start_ts` range used to filter `entries`. Entries are matched on `start_ts` falling within
 `[today 00:00:00, today 23:59:59]` in that timezone.
@@ -436,7 +436,7 @@ external call; the narrative is fully rule-based and deterministic for a given s
 | GET | `/settings` | Get the current (singleton) settings. |
 | PATCH | `/settings` | Partially update the singleton settings. |
 
-`settings` is a **singleton** table (see `app/schema.py`'s `_seed_default_settings`): exactly one
+`settings` is a **singleton** table (see `app/db_schema.py`'s `_seed_default_settings`): exactly one
 row exists at all times, seeded at DB init with `('timer', 'monday', 'md', <app_name>, 'UTC')`.
 These endpoints only ever read or update that single row — there is no `POST`/`DELETE` and no
 `{settings_id}` path segment; rows are never created or destroyed via the API.

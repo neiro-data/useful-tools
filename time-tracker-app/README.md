@@ -29,8 +29,8 @@ time-tracker-app/
 │   ├── config.py    # pydantic-settings configuration (env-driven)
 │   ├── api.py       # root API router (feature routers plug in here)
 │   ├── db.py        # SQLite connection helper
-│   ├── schema.py     # DB schema + idempotent init
-│   ├── schemas.py     # Pydantic request/response models
+│   ├── db_schema.py   # SQLite DDL, indexes, idempotent init + migrations
+│   ├── schemas.py     # Pydantic request/response models (the HTTP contract)
 │   ├── API_CONTRACT.md # endpoint contract (paths, bodies, status codes, error envelope)
 │   └── routers/       # categories, tags, entries, timer, today, reports, settings, exports
 ├── design/

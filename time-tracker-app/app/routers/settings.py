@@ -1,6 +1,6 @@
 """``/settings`` endpoints. See ``app/API_CONTRACT.md#settings`` for the full contract.
 
-``settings`` is a singleton table (see ``app/schema.py``'s ``_seed_default_settings``): exactly
+``settings`` is a singleton table (see ``app/db_schema.py``'s ``_seed_default_settings``): exactly
 one row exists at all times, seeded at DB init. These endpoints only ever read or update that
 single row — they never insert or delete rows.
 """
