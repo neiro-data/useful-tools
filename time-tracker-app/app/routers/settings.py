@@ -6,14 +6,21 @@ single row — they never insert or delete rows.
 """
 
 import sqlite3
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from datetime import UTC, datetime
+from functools import lru_cache
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 
 from fastapi import APIRouter
 
 from app.deps import DbDep
 from app.errors import ValidationError
 from app.repo import settings_from_row, transaction
-from app.schemas import SettingsRead, SettingsUpdate
+from app.schemas import (
+    SettingsRead,
+    SettingsUpdate,
+    TimezoneListResponse,
+    TimezoneOption,
+)
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -34,6 +41,27 @@ def _get_settings_row(db: sqlite3.Connection) -> sqlite3.Row:
     return row
 
 
+@lru_cache(maxsize=1)
+def _sorted_timezone_names() -> tuple[str, ...]:
+    """All IANA zone names known to ``zoneinfo``, sorted. Cached: the tz database is loaded from
+    disk at process start and does not change while the app is running. Offsets are deliberately
+    NOT cached here — see :func:`_format_utc_offset`."""
+    return tuple(sorted(available_timezones()))
+
+
+def _format_utc_offset(now_utc: datetime, name: str) -> str:
+    """Format ``name``'s CURRENT offset as ``+HH:MM`` / ``-HH:MM``.
+
+    Computed per request rather than cached because a zone's offset changes when it enters or
+    leaves daylight saving time; a cached label would silently drift by an hour twice a year.
+    """
+    offset = now_utc.astimezone(ZoneInfo(name)).utcoffset()
+    total_minutes = round(offset.total_seconds() / 60) if offset is not None else 0
+    sign = "-" if total_minutes < 0 else "+"
+    hours, minutes = divmod(abs(total_minutes), 60)
+    return f"{sign}{hours:02d}:{minutes:02d}"
+
+
 def _validate_timezone(value: str) -> None:
     try:
         ZoneInfo(value)
@@ -48,6 +76,22 @@ def _validate_timezone(value: str) -> None:
 def get_settings_endpoint(db: DbDep) -> SettingsRead:
     """Get the current (singleton) settings row."""
     return settings_from_row(_get_settings_row(db))
+
+
+@router.get("/timezones", response_model=TimezoneListResponse)
+def list_timezones() -> TimezoneListResponse:
+    """List every timezone ``PATCH /settings`` accepts, each with its current UTC offset.
+
+    Backs the Settings timezone dropdown. Drawn from the same ``zoneinfo`` database that
+    :func:`_validate_timezone` checks against, so the UI can never offer a value the server would
+    reject. Takes no database dependency — this is static process data, not app state.
+    """
+    now_utc = datetime.now(UTC)
+    items = [
+        TimezoneOption(name=name, utc_offset=_format_utc_offset(now_utc, name))
+        for name in _sorted_timezone_names()
+    ]
+    return TimezoneListResponse(items=items, total=len(items))
 
 
 @router.patch("", response_model=SettingsRead)

@@ -203,6 +203,18 @@ export interface SettingsUpdate {
   timezone?: string;
 }
 
+/** One selectable IANA timezone, for the Settings timezone dropdown. `utc_offset` is the zone's
+ * CURRENT offset (DST-aware) and is display-only — only `name` is ever sent to `PATCH /settings`. */
+export interface TimezoneOption {
+  name: string;
+  utc_offset: string;
+}
+
+export interface TimezoneListResponse {
+  items: TimezoneOption[];
+  total: number;
+}
+
 /** Stable, machine-readable error codes the frontend can branch on (see API_CONTRACT.md). */
 export type ApiErrorCode =
   | "bad_request"
