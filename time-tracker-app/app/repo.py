@@ -174,11 +174,16 @@ def get_tags_for_entry(db: sqlite3.Connection, entry_id: int) -> list[sqlite3.Ro
 
 
 def entry_from_row(db: sqlite3.Connection, row: sqlite3.Row) -> EntryRead:
-    category = None
-    if row["category_id"] is not None:
-        category_row = get_category_row(db, row["category_id"])
-        if category_row is not None:
-            category = category_from_row(category_row)
+    category_row = get_category_row(db, row["category_id"])
+    if category_row is None:
+        # category_id is NOT NULL + FK-enforced, so a resolvable category row must always exist.
+        # If this ever fires it indicates DB corruption or a broken FK, not a normal "no
+        # category" case - surface it loudly rather than silently rendering a null category.
+        raise RuntimeError(
+            f"Entry {row['id']} references category_id={row['category_id']!r}, which does not "
+            "exist. This should be impossible under the entries.category_id FK constraint."
+        )
+    category = category_from_row(category_row)
 
     tags = [tag_from_row(r) for r in get_tags_for_entry(db, row["id"])]
 

@@ -16,10 +16,12 @@ def _make_tag(client: TestClient, name: str = "focus") -> int:
 
 
 def test_create_entry_computes_duration_server_side(client: TestClient) -> None:
+    category_id = _make_category(client)
     response = client.post(
         "/entries",
         json={
             "title": "Write report",
+            "category_id": category_id,
             "start_ts": "2026-07-13T09:00:00+00:00",
             "end_ts": "2026-07-13T10:30:00+00:00",
             "duration_minutes": 999999,  # must be ignored; not part of EntryCreateManual anyway
@@ -53,6 +55,19 @@ def test_create_entry_with_category_and_tags(client: TestClient) -> None:
     assert [tag["id"] for tag in body["tags"]] == [tag_id]
 
 
+def test_create_entry_without_category_is_validation_error(client: TestClient) -> None:
+    response = client.post(
+        "/entries",
+        json={
+            "title": "Write report",
+            "start_ts": "2026-07-13T09:00:00+00:00",
+            "end_ts": "2026-07-13T10:00:00+00:00",
+        },
+    )
+
+    assert response.status_code == 422
+
+
 def test_create_entry_invalid_category_is_404(client: TestClient) -> None:
     response = client.post(
         "/entries",
@@ -69,10 +84,12 @@ def test_create_entry_invalid_category_is_404(client: TestClient) -> None:
 
 
 def test_create_entry_invalid_tag_is_404(client: TestClient) -> None:
+    category_id = _make_category(client)
     response = client.post(
         "/entries",
         json={
             "title": "Write report",
+            "category_id": category_id,
             "tag_ids": [999],
             "start_ts": "2026-07-13T09:00:00+00:00",
             "end_ts": "2026-07-13T10:00:00+00:00",
@@ -84,10 +101,12 @@ def test_create_entry_invalid_tag_is_404(client: TestClient) -> None:
 
 
 def test_create_entry_end_before_start_is_validation_error(client: TestClient) -> None:
+    category_id = _make_category(client)
     response = client.post(
         "/entries",
         json={
             "title": "Write report",
+            "category_id": category_id,
             "start_ts": "2026-07-13T10:00:00+00:00",
             "end_ts": "2026-07-13T09:00:00+00:00",
         },
@@ -104,10 +123,12 @@ def test_get_entry_not_found(client: TestClient) -> None:
 
 
 def test_update_entry_recomputes_duration(client: TestClient) -> None:
+    category_id = _make_category(client)
     entry = client.post(
         "/entries",
         json={
             "title": "Write report",
+            "category_id": category_id,
             "start_ts": "2026-07-13T09:00:00+00:00",
             "end_ts": "2026-07-13T10:00:00+00:00",
         },
@@ -120,10 +141,12 @@ def test_update_entry_recomputes_duration(client: TestClient) -> None:
 
 
 def test_update_entry_clearing_end_ts_sets_duration_null(client: TestClient) -> None:
+    category_id = _make_category(client)
     entry = client.post(
         "/entries",
         json={
             "title": "Write report",
+            "category_id": category_id,
             "start_ts": "2026-07-13T09:00:00+00:00",
             "end_ts": "2026-07-13T10:00:00+00:00",
         },
@@ -138,10 +161,12 @@ def test_update_entry_clearing_end_ts_sets_duration_null(client: TestClient) -> 
 
 
 def test_update_entry_effective_end_before_start_is_validation_error(client: TestClient) -> None:
+    category_id = _make_category(client)
     entry = client.post(
         "/entries",
         json={
             "title": "Write report",
+            "category_id": category_id,
             "start_ts": "2026-07-13T09:00:00+00:00",
             "end_ts": "2026-07-13T10:00:00+00:00",
         },
@@ -157,12 +182,14 @@ def test_update_entry_effective_end_before_start_is_validation_error(client: Tes
 
 
 def test_update_entry_replaces_tags(client: TestClient) -> None:
+    category_id = _make_category(client)
     tag_a = _make_tag(client, "a")
     tag_b = _make_tag(client, "b")
     entry = client.post(
         "/entries",
         json={
             "title": "Write report",
+            "category_id": category_id,
             "tag_ids": [tag_a],
             "start_ts": "2026-07-13T09:00:00+00:00",
             "end_ts": "2026-07-13T10:00:00+00:00",
@@ -181,11 +208,33 @@ def test_update_entry_not_found(client: TestClient) -> None:
     assert response.status_code == 404
 
 
-def test_delete_entry(client: TestClient) -> None:
+def test_update_entry_explicit_null_category_is_validation_error(client: TestClient) -> None:
+    category_id = _make_category(client)
     entry = client.post(
         "/entries",
         json={
             "title": "Write report",
+            "category_id": category_id,
+            "start_ts": "2026-07-13T09:00:00+00:00",
+            "end_ts": "2026-07-13T10:00:00+00:00",
+        },
+    ).json()
+
+    response = client.patch(f"/entries/{entry['id']}", json={"category_id": None})
+
+    assert response.status_code in (400, 422)
+
+    unchanged = client.get(f"/entries/{entry['id']}").json()
+    assert unchanged["category"]["id"] == category_id
+
+
+def test_delete_entry(client: TestClient) -> None:
+    category_id = _make_category(client)
+    entry = client.post(
+        "/entries",
+        json={
+            "title": "Write report",
+            "category_id": category_id,
             "start_ts": "2026-07-13T09:00:00+00:00",
             "end_ts": "2026-07-13T10:00:00+00:00",
         },
@@ -201,7 +250,10 @@ def test_delete_entry(client: TestClient) -> None:
 def test_delete_running_timer_entry_cancels_it(client: TestClient) -> None:
     """DELETE on the currently-running timer's entry is an allowed "cancel/discard the running
     timer" action: the entry is hard-deleted and no timer remains running afterwards."""
-    started = client.post("/timer/start", json={"title": "Deep work"}).json()
+    category_id = _make_category(client)
+    started = client.post(
+        "/timer/start", json={"title": "Deep work", "category_id": category_id}
+    ).json()
 
     delete_response = client.delete(f"/entries/{started['id']}")
     assert delete_response.status_code == 204
@@ -221,10 +273,12 @@ def test_delete_entry_not_found(client: TestClient) -> None:
 
 
 def test_list_entries_filters_by_date_range(client: TestClient) -> None:
+    category_id = _make_category(client)
     in_range = client.post(
         "/entries",
         json={
             "title": "In range",
+            "category_id": category_id,
             "start_ts": "2026-07-13T09:00:00+00:00",
             "end_ts": "2026-07-13T10:00:00+00:00",
         },
@@ -233,6 +287,7 @@ def test_list_entries_filters_by_date_range(client: TestClient) -> None:
         "/entries",
         json={
             "title": "Out of range",
+            "category_id": category_id,
             "start_ts": "2026-08-01T09:00:00+00:00",
             "end_ts": "2026-08-01T10:00:00+00:00",
         },
@@ -248,6 +303,7 @@ def test_list_entries_filters_by_date_range(client: TestClient) -> None:
 
 def test_list_entries_filters_by_category(client: TestClient) -> None:
     category_id = _make_category(client)
+    other_category_id = _make_category(client, "Other")
     matching = client.post(
         "/entries",
         json={
@@ -261,6 +317,7 @@ def test_list_entries_filters_by_category(client: TestClient) -> None:
         "/entries",
         json={
             "title": "Other",
+            "category_id": other_category_id,
             "start_ts": "2026-07-13T09:00:00+00:00",
             "end_ts": "2026-07-13T10:00:00+00:00",
         },
@@ -274,11 +331,13 @@ def test_list_entries_filters_by_category(client: TestClient) -> None:
 
 
 def test_list_entries_filters_by_tag(client: TestClient) -> None:
+    category_id = _make_category(client)
     tag_id = _make_tag(client)
     matching = client.post(
         "/entries",
         json={
             "title": "Matching",
+            "category_id": category_id,
             "tag_ids": [tag_id],
             "start_ts": "2026-07-13T09:00:00+00:00",
             "end_ts": "2026-07-13T10:00:00+00:00",
@@ -288,6 +347,7 @@ def test_list_entries_filters_by_tag(client: TestClient) -> None:
         "/entries",
         json={
             "title": "Other",
+            "category_id": category_id,
             "start_ts": "2026-07-13T09:00:00+00:00",
             "end_ts": "2026-07-13T10:00:00+00:00",
         },
@@ -330,3 +390,23 @@ def test_list_entries_end_date_before_start_date_is_validation_error(client: Tes
 
     assert response.status_code == 422
     assert response.json()["error"]["code"] == "validation_error"
+
+
+def test_notes_round_trips_on_create_and_update(client: TestClient) -> None:
+    category_id = _make_category(client)
+    entry = client.post(
+        "/entries",
+        json={
+            "title": "Write report",
+            "notes": "Initial comment",
+            "category_id": category_id,
+            "start_ts": "2026-07-13T09:00:00+00:00",
+            "end_ts": "2026-07-13T10:00:00+00:00",
+        },
+    ).json()
+    assert entry["notes"] == "Initial comment"
+
+    response = client.patch(f"/entries/{entry['id']}", json={"notes": "Updated comment"})
+
+    assert response.status_code == 200
+    assert response.json()["notes"] == "Updated comment"

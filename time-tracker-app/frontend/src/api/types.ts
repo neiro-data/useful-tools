@@ -70,7 +70,7 @@ export interface EntryRead {
   id: number;
   title: string;
   notes: string | null;
-  category: CategoryRead | null;
+  category: CategoryRead;
   tags: TagRead[];
   start_ts: string;
   end_ts: string | null;
@@ -83,7 +83,7 @@ export interface EntryRead {
 export interface EntryCreateManual {
   title: string;
   notes?: string | null;
-  category_id?: number | null;
+  category_id: number;
   tag_ids?: number[];
   start_ts: string;
   end_ts: string;
@@ -118,7 +118,7 @@ export interface EntryListQuery {
 export interface TimerStartRequest {
   title?: string | null;
   notes?: string | null;
-  category_id?: number | null;
+  category_id: number;
   tag_ids?: number[];
 }
 

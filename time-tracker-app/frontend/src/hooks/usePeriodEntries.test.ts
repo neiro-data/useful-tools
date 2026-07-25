@@ -2,7 +2,9 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { usePeriodEntries } from "./usePeriodEntries";
 import { listEntries } from "../api/entries";
-import type { EntryListResponse, EntryRead } from "../api/types";
+import type { CategoryRead, EntryListResponse, EntryRead } from "../api/types";
+
+const deepWork: CategoryRead = { id: 1, name: "Deep Work", color: "blue", is_active: true, sort_order: 0 };
 
 /**
  * `usePeriodEntries` fetches *all* entries in `[startDate, endDate]`, paging through
@@ -17,7 +19,7 @@ function makeEntry(overrides: Partial<EntryRead> = {}): EntryRead {
     id: 1,
     title: "Deep Work",
     notes: null,
-    category: null,
+    category: deepWork,
     tags: [],
     start_ts: "2026-07-06T09:00:00Z",
     end_ts: "2026-07-06T10:00:00Z",

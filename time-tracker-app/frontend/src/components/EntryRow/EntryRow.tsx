@@ -10,7 +10,10 @@ import styles from "./EntryRow.module.css";
 
 export interface EntryRowSaveValues {
   title: string;
-  category: CategoryRead | null;
+  category: CategoryRead;
+  /** Backs the API's `notes` field; labelled "Comment" in the UI (deliberate naming mismatch, see
+   * `ManualEntryForm`/`TimerWidget` for the same convention). */
+  notes: string | null;
   tagNames: string[];
 }
 
@@ -38,19 +41,23 @@ export function EntryRow({
   const [title, setTitle] = useState(entry.title);
   const [category, setCategory] = useState<CategoryRead | null>(entry.category);
   const [tagNames, setTagNames] = useState<string[]>(entry.tags.map((tag) => tag.name));
+  const [notes, setNotes] = useState(entry.notes ?? "");
   const [saving, setSaving] = useState(false);
 
   function startEdit(): void {
     setTitle(entry.title);
     setCategory(entry.category);
     setTagNames(entry.tags.map((tag) => tag.name));
+    setNotes(entry.notes ?? "");
     setMode("edit");
   }
 
   async function save(): Promise<void> {
+    if (category === null) return;
     setSaving(true);
     try {
-      await onSave({ title, category, tagNames });
+      const trimmedNotes = notes.trim();
+      await onSave({ title, category, tagNames, notes: trimmedNotes.length > 0 ? trimmedNotes : null });
       setMode("view");
     } finally {
       setSaving(false);
@@ -97,14 +104,22 @@ export function EntryRow({
             autoFocus
           />
           <div className={styles.editMeta}>
-            <CategoryPicker categories={categories} value={category} onChange={setCategory} />
+            <CategoryPicker categories={categories} value={category} onChange={setCategory} required />
             <TagEditor value={tagNames} onChange={setTagNames} knownTags={knownTags} />
           </div>
+          {/* User-facing label is "Comment"; the prop/wire field stays `notes`. */}
+          <input
+            className={styles.notesInput}
+            placeholder="Comment (optional)"
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            aria-label="Entry comment"
+          />
           <div className={styles.editActions}>
             <button
               type="button"
               className={styles.primaryButton}
-              disabled={saving}
+              disabled={saving || category === null}
               onClick={() => void save()}
             >
               Save
@@ -132,7 +147,7 @@ export function EntryRow({
     >
       <span className={styles.bar} style={{ background: barColor }} aria-hidden="true" />
       <span className={styles.title}>{entry.title}</span>
-      {entry.category && <CategoryChip category={entry.category} />}
+      <CategoryChip category={entry.category} />
       <span className={styles.tags}>
         {entry.tags.map((tag) => (
           <TagChip key={tag.id} name={tag.name} />

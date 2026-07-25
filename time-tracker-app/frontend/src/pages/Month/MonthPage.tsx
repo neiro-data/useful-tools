@@ -64,7 +64,7 @@ export function MonthPage(): ReactElement {
   const orderedDays = useMemo(() => [...days].reverse(), [days]);
 
   async function handleSaveEntry(entryId: number, values: EntryRowSaveValues): Promise<void> {
-    await updateEntry(entryId, { title: values.title, category_id: values.category?.id ?? null });
+    await updateEntry(entryId, { title: values.title, category_id: values.category.id, notes: values.notes });
     await reload();
   }
 

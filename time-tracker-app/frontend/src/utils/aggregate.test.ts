@@ -32,7 +32,7 @@ function makeEntry(overrides: Partial<EntryRead>): EntryRead {
     id: 1,
     title: "Entry",
     notes: null,
-    category: null,
+    category: deepWork,
     tags: [],
     start_ts: "2026-07-13T09:00:00+00:00",
     end_ts: "2026-07-13T10:00:00+00:00",
@@ -57,24 +57,22 @@ describe("totalMinutes", () => {
 });
 
 describe("breakdownByCategory", () => {
-  it("sums minutes per category, including an Uncategorized bucket, sorted descending", () => {
+  it("sums minutes per category, sorted descending", () => {
     const entries = [
       makeEntry({ id: 1, category: deepWork, duration_minutes: 60 }),
       makeEntry({ id: 2, category: deepWork, duration_minutes: 30 }),
       makeEntry({ id: 3, category: meetings, duration_minutes: 20 }),
-      makeEntry({ id: 4, category: null, duration_minutes: 10 }),
     ];
 
     const breakdown = breakdownByCategory(entries);
 
-    expect(breakdown).toHaveLength(3);
+    expect(breakdown).toHaveLength(2);
     expect(breakdown[0]).toMatchObject({ key: "cat-1", label: "Deep Work", minutes: 90 });
     expect(breakdown[1]).toMatchObject({ key: "cat-2", label: "Meetings", minutes: 20 });
-    expect(breakdown[2]).toMatchObject({ key: "uncategorized", label: "Uncategorized", minutes: 10 });
 
-    const grandTotal = 90 + 20 + 10;
+    const grandTotal = 90 + 20;
     expect(breakdown[0]?.percent).toBeCloseTo((90 / grandTotal) * 100);
-    expect(breakdown[2]?.percent).toBeCloseTo((10 / grandTotal) * 100);
+    expect(breakdown[1]?.percent).toBeCloseTo((20 / grandTotal) * 100);
   });
 
   it("returns an empty list for no entries", () => {
@@ -108,8 +106,6 @@ describe("breakdownByTag", () => {
 
     const breakdown = breakdownByTag(entries);
 
-    expect(breakdown).toEqual([
-      { key: "tag-10", label: "#focus", colorKey: null, minutes: 0, percent: 0 },
-    ]);
+    expect(breakdown).toEqual([{ key: "tag-10", label: "#focus", colorKey: null, minutes: 0, percent: 0 }]);
   });
 });

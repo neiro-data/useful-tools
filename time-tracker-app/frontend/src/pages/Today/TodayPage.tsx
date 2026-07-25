@@ -61,7 +61,12 @@ export function TodayPage(): ReactElement {
     setStarting(true);
     try {
       const { ids } = await resolveTagIds(payload.tagNames, tags);
-      await startTimer({ title: payload.title, category_id: payload.category?.id ?? null, tag_ids: ids });
+      await startTimer({
+        title: payload.title,
+        category_id: payload.category.id,
+        tag_ids: ids,
+        notes: payload.notes,
+      });
       await load();
     } catch (err) {
       if (err instanceof ApiError && err.isTimerAlreadyRunning && err.runningEntryId !== null) {
@@ -93,8 +98,9 @@ export function TodayPage(): ReactElement {
     if (created.length > 0) setTags((prev) => [...prev, ...created]);
     await updateEntry(today.running_timer.id, {
       title: payload.title,
-      category_id: payload.category?.id ?? null,
+      category_id: payload.category.id,
       tag_ids: ids,
+      notes: payload.notes,
     });
     await load();
   }
@@ -104,8 +110,9 @@ export function TodayPage(): ReactElement {
     if (created.length > 0) setTags((prev) => [...prev, ...created]);
     await createEntry({
       title: payload.title,
-      category_id: payload.category?.id ?? null,
+      category_id: payload.category.id,
       tag_ids: ids,
+      notes: payload.notes,
       start_ts: payload.startTs,
       end_ts: payload.endTs,
     });
@@ -117,8 +124,9 @@ export function TodayPage(): ReactElement {
     if (created.length > 0) setTags((prev) => [...prev, ...created]);
     await updateEntry(entryId, {
       title: values.title,
-      category_id: values.category?.id ?? null,
+      category_id: values.category.id,
       tag_ids: ids,
+      notes: values.notes,
     });
     await load();
   }

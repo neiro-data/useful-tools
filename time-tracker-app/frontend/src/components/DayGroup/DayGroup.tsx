@@ -43,7 +43,7 @@ export function DayGroup({
     await onAddEntry({
       title: values.title,
       notes: values.notes ?? null,
-      category_id: values.category_id ?? null,
+      category_id: values.category_id,
       tag_ids: ids,
       start_ts: values.start_ts,
       end_ts: values.end_ts,

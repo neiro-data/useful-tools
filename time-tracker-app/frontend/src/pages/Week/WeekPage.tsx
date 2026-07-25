@@ -56,7 +56,7 @@ export function WeekPage(): ReactElement {
   const chartDays = days.map((isoDate) => ({ isoDate, minutes: totalMinutes(grouped.get(isoDate) ?? []) }));
 
   async function handleSaveEntry(entryId: number, values: EntryRowSaveValues): Promise<void> {
-    await updateEntry(entryId, { title: values.title, category_id: values.category?.id ?? null });
+    await updateEntry(entryId, { title: values.title, category_id: values.category.id, notes: values.notes });
     await reload();
   }
 

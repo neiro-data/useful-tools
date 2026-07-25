@@ -28,7 +28,9 @@ def test_full_capture_lifecycle(client: TestClient, monkeypatch: pytest.MonkeyPa
     # --- Start timer, with a controlled start time -------------------------------------------
     start_instant = datetime(2026, 7, 13, 9, 0, 0, tzinfo=UTC)
     monkeypatch.setattr("app.routers.timer.utc_now_iso", lambda: start_instant.isoformat())
-    start_response = client.post("/timer/start", json={"title": "Untitled work"})
+    start_response = client.post(
+        "/timer/start", json={"title": "Untitled work", "category_id": deep_work["id"]}
+    )
     assert start_response.status_code == 201
     started = start_response.json()
     assert started["end_ts"] is None

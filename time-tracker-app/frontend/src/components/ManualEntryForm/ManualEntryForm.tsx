@@ -43,6 +43,10 @@ export function ManualEntryForm({
       setError("Title is required.");
       return;
     }
+    if (category === null) {
+      setError("Category is required.");
+      return;
+    }
     const startTs = new Date(start).toISOString();
     const endTs = new Date(end).toISOString();
     if (endTs < startTs) {
@@ -54,7 +58,7 @@ export function ManualEntryForm({
       await onSubmit({
         title: title.trim(),
         notes: notes.trim().length > 0 ? notes.trim() : null,
-        category_id: category?.id ?? null,
+        category_id: category.id,
         tagNames,
         start_ts: startTs,
         end_ts: endTs,
@@ -74,15 +78,17 @@ export function ManualEntryForm({
         aria-label="Manual entry title"
         autoFocus
       />
+      {/* User-facing label is "Comment"; the prop/wire field stays `notes` (see `app/schemas.py`) —
+       * deliberate naming mismatch, not a bug. */}
       <textarea
         className={styles.notesInput}
-        placeholder="Notes (optional)"
+        placeholder="Comment (optional)"
         value={notes}
         onChange={(event) => setNotes(event.target.value)}
-        aria-label="Manual entry notes"
+        aria-label="Manual entry comment"
       />
       <div className={styles.metaRow}>
-        <CategoryPicker categories={categories} value={category} onChange={setCategory} />
+        <CategoryPicker categories={categories} value={category} onChange={setCategory} required />
         <TagEditor value={tagNames} onChange={setTagNames} knownTags={knownTags} />
       </div>
       <div className={styles.timesRow}>

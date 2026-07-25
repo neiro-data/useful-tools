@@ -3,8 +3,17 @@
 from fastapi.testclient import TestClient
 
 
+def _make_category(client: TestClient, name: str = "Deep Work") -> int:
+    response = client.post("/categories", json={"name": name})
+    category_id: int = response.json()["id"]
+    return category_id
+
+
 def test_timer_lifecycle_start_current_stop(client: TestClient) -> None:
-    start_response = client.post("/timer/start", json={"title": "Deep work"})
+    category_id = _make_category(client)
+    start_response = client.post(
+        "/timer/start", json={"title": "Deep work", "category_id": category_id}
+    )
     assert start_response.status_code == 201
     started = start_response.json()
     assert started["end_ts"] is None
@@ -32,16 +41,24 @@ def test_timer_lifecycle_start_current_stop(client: TestClient) -> None:
 
 
 def test_timer_start_default_title(client: TestClient) -> None:
-    response = client.post("/timer/start", json={})
+    category_id = _make_category(client)
+    response = client.post("/timer/start", json={"category_id": category_id})
 
     assert response.status_code == 201
     assert response.json()["title"] == "Untitled"
 
 
-def test_starting_second_timer_is_conflict(client: TestClient) -> None:
-    first = client.post("/timer/start", json={"title": "First"}).json()
+def test_timer_start_without_category_is_validation_error(client: TestClient) -> None:
+    response = client.post("/timer/start", json={})
 
-    response = client.post("/timer/start", json={"title": "Second"})
+    assert response.status_code == 422
+
+
+def test_starting_second_timer_is_conflict(client: TestClient) -> None:
+    category_id = _make_category(client)
+    first = client.post("/timer/start", json={"title": "First", "category_id": category_id}).json()
+
+    response = client.post("/timer/start", json={"title": "Second", "category_id": category_id})
 
     assert response.status_code == 409
     error = response.json()["error"]
@@ -75,7 +92,8 @@ def test_timer_start_invalid_category_is_404(client: TestClient) -> None:
 
 
 def test_stopping_an_already_stopped_timer_is_conflict(client: TestClient) -> None:
-    client.post("/timer/start", json={"title": "Only run"})
+    category_id = _make_category(client)
+    client.post("/timer/start", json={"title": "Only run", "category_id": category_id})
 
     first_stop = client.post("/timer/stop", json={})
     assert first_stop.status_code == 200
@@ -93,12 +111,13 @@ def test_stopping_an_already_stopped_timer_is_conflict(client: TestClient) -> No
 
 
 def test_timer_stop_can_assign_category_and_tags(client: TestClient) -> None:
+    start_category_id = _make_category(client, "Placeholder")
     category_response = client.post("/categories", json={"name": "Deep Work"})
     category_id = category_response.json()["id"]
     tag_response = client.post("/tags", json={"name": "focus"})
     tag_id = tag_response.json()["id"]
 
-    client.post("/timer/start", json={})
+    client.post("/timer/start", json={"category_id": start_category_id})
 
     response = client.post("/timer/stop", json={"category_id": category_id, "tag_ids": [tag_id]})
 
@@ -106,3 +125,28 @@ def test_timer_stop_can_assign_category_and_tags(client: TestClient) -> None:
     body = response.json()
     assert body["category"]["id"] == category_id
     assert [tag["id"] for tag in body["tags"]] == [tag_id]
+
+
+def test_timer_stop_explicit_null_category_is_validation_error(client: TestClient) -> None:
+    category_id = _make_category(client)
+    client.post("/timer/start", json={"category_id": category_id})
+
+    response = client.post("/timer/stop", json={"category_id": None})
+
+    assert response.status_code in (400, 422)
+
+    current = client.get("/timer/current").json()
+    assert current["running"] is True
+    assert current["entry"]["category"]["id"] == category_id
+
+
+def test_notes_round_trips_on_timer_start_and_stop(client: TestClient) -> None:
+    category_id = _make_category(client)
+    started = client.post(
+        "/timer/start",
+        json={"category_id": category_id, "notes": "Started with a comment"},
+    ).json()
+    assert started["notes"] == "Started with a comment"
+
+    stopped = client.post("/timer/stop", json={"notes": "Stopped with an updated comment"}).json()
+    assert stopped["notes"] == "Stopped with an updated comment"

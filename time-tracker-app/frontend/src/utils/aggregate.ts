@@ -35,9 +35,9 @@ export function groupByDay(entries: EntryRead[]): Map<string, EntryRead[]> {
 export function breakdownByCategory(entries: EntryRead[]): BreakdownSegment[] {
   const totals = new Map<string, { label: string; colorKey: string | null; minutes: number }>();
   for (const entry of entries) {
-    const key = entry.category ? `cat-${entry.category.id}` : "uncategorized";
-    const label = entry.category ? entry.category.name : "Uncategorized";
-    const colorKey = entry.category?.color ?? "slate";
+    const key = `cat-${entry.category.id}`;
+    const label = entry.category.name;
+    const colorKey = entry.category.color ?? "slate";
     const existing = totals.get(key);
     const minutes = finishedMinutes(entry);
     if (existing) existing.minutes += minutes;
