@@ -744,6 +744,49 @@ clean. Import ordering in `app/main.py` needed a `ruff --fix` since `app.db_sche
 **Agents:** none. Mechanical rename driven entirely from the main thread — delegating it would have cost
 more than doing it.
 
+## Branch `feat/dummy-database` — disposable sample database for tests and experiments
+
+The user asked for a dummy database to use for tests and experiments, not tracked by git. Added
+`app/dummy_data.py` (CLI: `uv run python -m app.dummy_data`), `tests/test_dummy_data.py`, an explicit
+`.gitignore` entry, and a README subsection.
+
+**Scope.** The automated suite was already safe — `tests/conftest.py` gives every test its own
+`tmp_path` database. The gap was *manual* work: curling endpoints, opening the SPA, running a script.
+All of those go through `TIME_TRACKER_DATABASE_PATH`, which defaults to the real `time_tracker.db`.
+This is exactly the hazard recorded after the smoke-test session. So the generator targets that gap:
+a populated, throwaway database to point the app at.
+
+**Safety guard — content, not filename.** A filename check would be trivially defeated (`--path`
+typo, a renamed file), so the generated database is *branded*: `settings.database_label` is set to
+`DUMMY DATA (app.dummy_data)`. Every destructive path (`generate`, and `--reset`'s `unlink`) calls
+`assert_safe_target` first, which reads the label back off disk and refuses on mismatch. Consequences:
+a real database is rejected (its label is the app name), a non-time-tracker SQLite file is rejected
+(no `settings` table), a garbage file is rejected (unreadable), and a missing/empty file is allowed.
+Crucially the guard runs *before* `init_db`, because `init_db` runs the `category_id NOT NULL`
+migration, which discards rows — running it against a real database "just to look" would not be
+harmless. Verified live: `--path time_tracker.db` exits 1 and the real database is untouched.
+
+**Determinism.** Seeded `random.Random(seed)` (default `20260713`), so the same arguments always
+produce the same database. Re-running clears entries/tags first rather than stacking, so the result
+depends only on the arguments, not on the number of runs. Categories are *not* cleared — they are
+re-synced from `seed/categories.toml` (reusing `app.seed.sync_categories`, so the dummy data uses the
+real taxonomy), and deleting them would trip the `ON DELETE RESTRICT` on `entries.category_id` anyway.
+
+**Shape of the data.** Weekdays only, quarter-hour blocks from 09:00 UTC with gaps, 3–5 entries/day,
+per-category title pools with a fallback for categories added to the seed file later, 0–2 tags each,
+~40% `manual` / 60% `timer`. `--running-timer` adds one open entry (`end_ts IS NULL`) for eyeballing
+the Today screen's live timer; off by default so the default database has no surprising state.
+
+**Git.** `.gitignore` already ignored `*.db`; added an explicit `dummy.db` line anyway so the file's
+purpose is self-documenting rather than incidental. Confirmed with `git check-ignore -v`.
+
+**Tests:** 15 new (safety guard, determinism, idempotent re-run, weekday/closed-entry invariants,
+CLI exit codes), 151 total passing. `ruff check`, `ruff format`, `mypy app` clean. Two lint fixes
+needed: an over-long docstring line, and an `S608` on the tests' `_count` f-string helper (suppressed
+with a noqa noting every call site passes a literal).
+
+**Agents:** none. Single-module feature; the main thread had the schema and seeding conventions
+already in context from the ER-diagram branch.
 ## Branch `docs/database-er-diagram` — schema diagram in the README
 
 Docs only, no code touched. Added a **Database** section to `README.md` between *Project layout* and
