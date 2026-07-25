@@ -13,6 +13,7 @@ from app.repo import (
     entry_from_row,
     get_settings_timezone,
     local_day_bounds_utc,
+    read_snapshot,
     tag_from_row,
 )
 from app.schemas import TodayResponse
@@ -30,52 +31,57 @@ def get_today(db: DbDep) -> TodayResponse:
 
     "Today" is resolved server-side using ``settings.timezone``; see ``app/API_CONTRACT.md`` for
     the exact boundary rule.
+
+    All reads (including the per-entry category/tag lookups inside :func:`entry_from_row`) are
+    wrapped in a single :func:`app.repo.read_snapshot` so the whole response is built from one
+    consistent point-in-time view of the database, even under concurrent writers.
     """
-    tz_name = get_settings_timezone(db)
-    tz = ZoneInfo(tz_name)
+    with read_snapshot(db):
+        tz_name = get_settings_timezone(db)
+        tz = ZoneInfo(tz_name)
 
-    today_local = datetime.now(tz).date()
-    start_utc, end_utc = local_day_bounds_utc(tz_name, today_local)
+        today_local = datetime.now(tz).date()
+        start_utc, end_utc = local_day_bounds_utc(tz_name, today_local)
 
-    entry_rows = db.execute(
-        """
-        SELECT * FROM entries
-        WHERE start_ts >= ? AND start_ts <= ? AND end_ts IS NOT NULL
-        ORDER BY start_ts DESC
-        """,
-        (start_utc, end_utc),
-    ).fetchall()
-    entries = [entry_from_row(db, row) for row in entry_rows]
+        entry_rows = db.execute(
+            """
+            SELECT * FROM entries
+            WHERE start_ts >= ? AND start_ts <= ? AND end_ts IS NOT NULL
+            ORDER BY start_ts DESC
+            """,
+            (start_utc, end_utc),
+        ).fetchall()
+        entries = [entry_from_row(db, row) for row in entry_rows]
 
-    running_row = db.execute("SELECT * FROM entries WHERE end_ts IS NULL").fetchone()
-    running_timer = entry_from_row(db, running_row) if running_row is not None else None
+        running_row = db.execute("SELECT * FROM entries WHERE end_ts IS NULL").fetchone()
+        running_timer = entry_from_row(db, running_row) if running_row is not None else None
 
-    recent_category_rows = db.execute(
-        """
-        SELECT c.* FROM categories c
-        JOIN entries e ON e.category_id = c.id
-        WHERE c.is_active = 1
-        GROUP BY c.id
-        ORDER BY MAX(e.start_ts) DESC
-        LIMIT ?
-        """,
-        (_RECENT_CATEGORIES_LIMIT,),
-    ).fetchall()
-    recent_categories = [category_from_row(row) for row in recent_category_rows]
+        recent_category_rows = db.execute(
+            """
+            SELECT c.* FROM categories c
+            JOIN entries e ON e.category_id = c.id
+            WHERE c.is_active = 1
+            GROUP BY c.id
+            ORDER BY MAX(e.start_ts) DESC
+            LIMIT ?
+            """,
+            (_RECENT_CATEGORIES_LIMIT,),
+        ).fetchall()
+        recent_categories = [category_from_row(row) for row in recent_category_rows]
 
-    recent_tag_rows = db.execute(
-        """
-        SELECT t.* FROM tags t
-        JOIN entry_tags et ON et.tag_id = t.id
-        JOIN entries e ON e.id = et.entry_id
-        WHERE t.is_active = 1
-        GROUP BY t.id
-        ORDER BY MAX(e.start_ts) DESC
-        LIMIT ?
-        """,
-        (_RECENT_TAGS_LIMIT,),
-    ).fetchall()
-    recent_tags = [tag_from_row(row) for row in recent_tag_rows]
+        recent_tag_rows = db.execute(
+            """
+            SELECT t.* FROM tags t
+            JOIN entry_tags et ON et.tag_id = t.id
+            JOIN entries e ON e.id = et.entry_id
+            WHERE t.is_active = 1
+            GROUP BY t.id
+            ORDER BY MAX(e.start_ts) DESC
+            LIMIT ?
+            """,
+            (_RECENT_TAGS_LIMIT,),
+        ).fetchall()
+        recent_tags = [tag_from_row(row) for row in recent_tag_rows]
 
     return TodayResponse(
         entries=entries,

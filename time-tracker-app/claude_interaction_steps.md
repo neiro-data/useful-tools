@@ -453,3 +453,56 @@ returns (checked specifically in `exports.py` / `reports.py`).
 
 **Agents:** `python-pro` ×9 (1 implement, 8 read-only per-router audits), `test-automator` ×1,
 `code-reviewer` ×1.
+
+---
+
+## Branch: `fix/today-consistent-snapshot`
+
+**Goal:** close the read-consistency follow-up logged on the previous branch — `/today` could return an
+internally inconsistent response under concurrent writes.
+
+**Why it became reachable:** `fix/sqlite-thread-affinity` (PR #12) made the app genuinely concurrent
+(`check_same_thread=False` + WAL). Before that, the threading bug 500'd most concurrent requests, so this
+interleaving was masked rather than absent.
+
+**Problem:** `get_today` issued 5+ separate SELECTs — settings timezone, today's entries, running timer,
+recent categories, recent tags — plus a category and tags lookup *per entry* inside `entry_from_row`. With
+`isolation_level = None` (autocommit), every statement committed independently, so a concurrent writer
+could commit between any two of them: e.g. a `running_timer` contradicting the already-read entries list,
+or tags fetched for an entry that was concurrently edited.
+
+**Fix:** new `read_snapshot(db)` context manager in `app/repo.py`; `get_today` wraps its whole body in it.
+
+**Key design call — `BEGIN DEFERRED`, not `BEGIN IMMEDIATE`.** The existing `transaction()` helper uses
+`BEGIN IMMEDIATE`, which takes the write lock up front. Reusing it here would have been the obvious
+"simplification" and would have been wrong: it would serialize every `/today` read against all writers and
+throw away the benefit of WAL. `BEGIN DEFERRED` takes no lock and, under WAL, establishes a stable read
+snapshot at the first read. `read_snapshot` always ends the transaction (COMMIT/ROLLBACK) — a leaked read
+transaction under WAL blocks checkpointing.
+
+**Re-entrancy guard:** `read_snapshot` raises a clear `RuntimeError` if the connection is already in a
+transaction. SQLite has no nested transactions, and since this wraps an entire route handler, a repo
+helper that later grew its own transaction would otherwise fail with the opaque
+`cannot start a transaction within a transaction`. Added after code review flagged it as a latent footgun.
+
+**Verified — the four properties that matter, checked directly against a temp WAL DB before writing tests:**
+snapshot isolation holds (concurrent committed write invisible inside the block, visible after); writers
+are NOT blocked while a snapshot is held (0.1ms, confirming DEFERRED); the exception path leaves
+`in_transaction == False`; and nesting raises the explicit error. Regressing `BEGIN DEFERRED` to
+`BEGIN IMMEDIATE` makes the new tests fail (in 62s — each blocked writer waits out the 30s busy timeout).
+
+**Tests:** `tests/test_read_snapshot.py` (new, 5 tests). `ruff format` + `ruff check` clean, `mypy app`
+clean (20 files), `pytest` 122 passed. End-to-end under real uvicorn: 30 parallel `GET /today` → all 200;
+40 mixed parallel `/today` + `POST /tags` → all 200/201, zero nested-transaction errors, zero
+`database is locked`, zero tracebacks.
+
+**Deliberately NOT changed:** `reports.py` and `exports.py` have the same multi-read pattern and could
+adopt `read_snapshot`, but were kept out of scope. `transaction()` did not get the same re-entrancy guard —
+worth adding for symmetry, but it is just-merged code and untouched here.
+
+**Known non-blocking nit (accepted):** `ZoneInfo(tz_name)` and `datetime.now(tz)` run inside the snapshot
+block, holding it open marginally longer than strictly needed. Moving them out would decouple the timezone
+read from the snapshot for negligible gain on a single-user local app, so it was left as-is.
+
+**Agents:** `python-pro` ×1 (implement), `test-automator` ×1, `code-reviewer` ×1. Orchestration was driven
+from the main thread (no `architect-orchestrator` sub-agent), so there is no separate token figure for it.
