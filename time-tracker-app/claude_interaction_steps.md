@@ -632,3 +632,71 @@ a generic `internal_error` envelope without leaking internals.
 frontend tests, 98,011 tokens), `code-reviewer` ×1 (44,017 tokens, no blocking issues). Orchestration,
 independent verification, the live-typing bug fix, its regression tests, and the `aria-required` a11y nit
 were done from the main thread. Total sub-agent usage: 268,832 tokens.
+
+---
+
+## Branch `feat/settings-add-category-and-timezone` — add-category form + timezone dropdown
+
+Settings screen work: let the user create a category, and replace the free-text timezone field with a
+dropdown of every valid zone.
+
+### Timezone dropdown
+
+**Why a backend endpoint rather than `Intl.supportedValuesOf('timeZone')`:** the browser's IANA list can
+drift from the Python `zoneinfo` database, and `PATCH /settings` validates against `zoneinfo`. Sourcing the
+list from the browser would let the UI offer a zone the server then rejects. New `GET /settings/timezones`
+reads the same database the validator uses, so the dropdown structurally cannot offer an invalid value —
+pinned by a test that PATCHes a sample of every listed zone and asserts each is accepted.
+
+Returns ~598 zones as `{name, utc_offset}`, sorted. The zone-name list is `lru_cache`d (the tz database is
+loaded at process start and does not change), but **offsets are deliberately not cached** — a zone's offset
+changes when it enters or leaves DST, so a cached label would silently drift by an hour twice a year. The
+endpoint takes no DB dependency; it is static process data, not app state.
+
+Offset formatting was verified empirically across all 598 zones, not just the obvious ones: `Asia/Kathmandu`
++05:45, `Pacific/Chatham` +12:45, `Asia/Kolkata` +05:30, `Pacific/Marquesas` -09:30, `America/St_Johns`
+-02:30 (DST-adjusted), `Pacific/Kiritimati` +14:00, and `Etc/GMT+12` → `-12:00` (the POSIX sign inversion
+comes out right because the offset is computed from the real `utcoffset()`, not parsed from the name). Zero
+malformed values.
+
+Frontend: native `<select>` grouped by IANA region with `<optgroup>` — no hand-rolled combobox, since native
+selects already handle ~600 options and are type-ahead searchable. `utc_offset` is display-only; only the
+bare `name` is ever submitted. If the list fails to load the page degrades instead of blocking: a `useMemo`
+injects the currently-saved zone as an option so it stays selected and saveable, and the rest of the settings
+form still works.
+
+### Add-category form
+
+Pure frontend — `GET`/`POST /categories` already existed and were not touched. Lists existing active
+categories as `CategoryChip`s (which is also how the user avoids tripping the 409 duplicate-name error),
+plus a create form. Colour offers the 12 design-system palette keys as swatches *and* a custom hex input;
+both are valid since `utils/categoryColor.ts` resolves named keys to theme-aware `var(--cat-*)` tokens and
+passes validated hex through. Palette keys are the default and the UI says why — they adapt to light/dark,
+raw hex does not. The 409 is handled with a specific "already exists" message rather than a generic failure.
+Deliberately no edit/deactivate/delete UI — the request was only to add.
+
+**Note on the agent's report:** the `frontend-developer` run reported that `useTimezones.ts`,
+`useCategories.ts`, and the `api/settings.ts`/`api/types.ts` additions "were already present before I
+started". That was wrong — `git status` shows both hooks as new untracked files created during its run, and
+both api files as modified by it. The code itself is correct and follows the existing `useReportSummary`
+cancelled-guard pattern; only the summary was inaccurate. Verified directly rather than taken at face value.
+
+**Tests:** backend 136 passed (was 132; 4 new covering sorted output, well-formed offsets, DST tracking, and
+listed-zones-are-accepted). Frontend 74 passed (was 68). `ruff check`, `mypy app`, `eslint`, `prettier` all
+clean.
+
+**Non-blocking, accepted as-is:** `useCategories.reload()` does not toggle `loading`, so refreshing after a
+create shows no spinner (cosmetic, not a race — it is awaited sequentially and guarded by the mounted ref);
+the `utcoffset() is None` branch in `_format_utc_offset` is unreachable for `zoneinfo`-backed values but kept
+as defensive code.
+
+**Pre-existing, still not fixed:** the same 2 `tsc` errors in `pages/Reports/ReportsPage.test.tsx`.
+
+**Incident:** an API smoke test during backend development ran against the real `time_tracker.db` (the
+default path when no `TIME_TRACKER_DATABASE_PATH` is set) and PATCHed `settings.timezone` to
+`Europe/Lisbon`. Restored to `UTC` from a backup taken earlier in the session. Future ad-hoc API checks
+against a running app should set `TIME_TRACKER_DATABASE_PATH` to a temp file first.
+
+**Agents:** `frontend-developer` ×1 (Settings UI + tests, 79,476 tokens), `code-reviewer` ×1 (40,453 tokens,
+no blocking issues). The backend endpoint, its schemas, and its 4 tests were written directly from the main
+thread rather than delegated — ~40 lines did not justify a spawn. Total sub-agent usage: 119,929 tokens.

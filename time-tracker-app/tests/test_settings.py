@@ -1,5 +1,9 @@
 """Tests for the ``/settings`` singleton endpoints. See ``app/routers/settings.py``."""
 
+import re
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from fastapi.testclient import TestClient
 
 from app.config import get_settings
@@ -147,3 +151,64 @@ def test_patch_timezone_round_trips_through_get(client: TestClient) -> None:
     get_response = client.get("/settings")
     assert get_response.status_code == 200
     assert get_response.json()["timezone"] == "America/Sao_Paulo"
+
+
+# --- GET /settings/timezones -------------------------------------------------------------------
+
+
+def test_list_timezones_returns_sorted_iana_names_with_offsets(client: TestClient) -> None:
+    response = client.get("/settings/timezones")
+    assert response.status_code == 200
+
+    body = response.json()
+    names = [item["name"] for item in body["items"]]
+
+    assert body["total"] == len(names)
+    assert len(names) > 100, "zoneinfo should expose the full IANA database"
+    assert names == sorted(names)
+    assert len(names) == len(set(names)), "no duplicate zone names"
+    for expected in ("UTC", "Europe/Lisbon", "America/New_York", "Pacific/Auckland"):
+        assert expected in names
+
+
+def test_list_timezones_offsets_are_well_formed(client: TestClient) -> None:
+    items = client.get("/settings/timezones").json()["items"]
+
+    pattern = re.compile(r"^[+-]\d{2}:\d{2}$")
+    for item in items:
+        assert pattern.match(item["utc_offset"]), f"{item['name']} -> {item['utc_offset']}"
+
+    by_name = {item["name"]: item["utc_offset"] for item in items}
+    assert by_name["UTC"] == "+00:00"
+
+
+def test_every_listed_timezone_is_accepted_by_patch(client: TestClient) -> None:
+    """The dropdown must never offer a value the server would reject.
+
+    Both endpoints read the same ``zoneinfo`` database, so this asserts they cannot drift apart.
+    A sample keeps the test fast while still covering both hemispheres and the DST edges.
+    """
+    names = [item["name"] for item in client.get("/settings/timezones").json()["items"]]
+    sample = names[::40] + ["UTC", "Europe/Lisbon", "America/New_York", "Pacific/Auckland"]
+
+    for name in sample:
+        response = client.patch("/settings", json={"timezone": name})
+        assert response.status_code == 200, f"{name} was listed but rejected"
+        assert response.json()["timezone"] == name
+
+
+def test_list_timezones_reflects_daylight_saving_for_a_known_zone(client: TestClient) -> None:
+    """Offsets are computed per request, not cached, so they track DST.
+
+    ``Europe/Lisbon`` is +00:00 in winter and +01:00 in summer; assert the listed value matches
+    what ``zoneinfo`` says right now rather than hardcoding either.
+    """
+    items = client.get("/settings/timezones").json()["items"]
+    listed = next(item["utc_offset"] for item in items if item["name"] == "Europe/Lisbon")
+
+    offset = datetime.now(ZoneInfo("Europe/Lisbon")).utcoffset()
+    assert offset is not None
+    minutes = round(offset.total_seconds() / 60)
+    sign = "-" if minutes < 0 else "+"
+    hours, mins = divmod(abs(minutes), 60)
+    assert listed == f"{sign}{hours:02d}:{mins:02d}"

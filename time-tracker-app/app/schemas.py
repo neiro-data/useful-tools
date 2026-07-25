@@ -573,3 +573,30 @@ class SettingsRead(BaseModel):
     default_export_format: ExportFormat
     database_label: str
     timezone: str
+
+
+class TimezoneOption(BaseModel):
+    """One selectable IANA timezone, for the Settings timezone dropdown.
+
+    ``utc_offset`` is the zone's offset **right now** (so it reflects whether the zone is
+    currently in daylight saving time) and exists purely to make the dropdown readable — it is
+    never sent back to the server. ``name`` is the only value ``PATCH /settings`` accepts.
+    """
+
+    model_config = ConfigDict(
+        json_schema_extra={"example": {"name": "Europe/Lisbon", "utc_offset": "+01:00"}}
+    )
+
+    name: str = Field(description="IANA zone name, e.g. ``Europe/Lisbon``.")
+    utc_offset: str = Field(description="Current UTC offset as ``+HH:MM``/``-HH:MM``.")
+
+
+class TimezoneListResponse(BaseModel):
+    """Response for ``GET /settings/timezones``: every zone ``PATCH /settings`` will accept.
+
+    Sourced from the same ``zoneinfo`` database the ``timezone`` validator checks against, so the
+    UI can only ever offer values the server will accept.
+    """
+
+    items: list[TimezoneOption]
+    total: int
