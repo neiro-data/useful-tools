@@ -18,7 +18,7 @@ from app.schemas import CategoryRead, EntryRead, SettingsRead, TagRead
 
 
 def utc_now_iso() -> str:
-    """Current time as an ISO-8601 UTC string, matching ``app/schema.py``'s storage format."""
+    """Current time as an ISO-8601 UTC string, matching ``app/db_schema.py``'s storage format."""
     return datetime.now(UTC).isoformat()
 
 

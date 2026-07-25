@@ -622,7 +622,8 @@ multi-word comments impossible to type. Split into `normalizeNotes` (submit-time
 `prettier` all clean.
 
 **Non-blocking, accepted as-is:** the migration's discard notice uses `print()` rather than a logger (the
-app has no logger configured); `entry_from_row` raises `RuntimeError` on an unresolvable category, which is
+app has no logger configured — **this was wrong, see the correction in the `refactor/rename-schema-to-db-schema`
+entry below**); `entry_from_row` raises `RuntimeError` on an unresolvable category, which is
 unreachable under the FK constraint and is caught by the catch-all handler at `app/main.py:72` that returns
 a generic `internal_error` envelope without leaking internals.
 
@@ -700,3 +701,45 @@ against a running app should set `TIME_TRACKER_DATABASE_PATH` to a temp file fir
 **Agents:** `frontend-developer` ×1 (Settings UI + tests, 79,476 tokens), `code-reviewer` ×1 (40,453 tokens,
 no blocking issues). The backend endpoint, its schemas, and its 4 tests were written directly from the main
 thread rather than delegated — ~40 lines did not justify a spawn. Total sub-agent usage: 119,929 tokens.
+
+---
+
+## Branch `refactor/rename-schema-to-db-schema` — disambiguate `schema.py` vs `schemas.py`
+
+Pure rename, no behaviour change. The user asked why both `app/schema.py` and `app/schemas.py` existed —
+a fair question, since they are one letter apart and easy to confuse in imports and review.
+
+They are two genuinely different layers, both from the original 2026-07-13 build (`schema.py` in Phase 0,
+`schemas.py` in Phase 1) — neither was introduced by the recent feature batch:
+
+- `app/schema.py` → **`app/db_schema.py`**: the storage layer. SQL DDL, indexes, `init_db()`, migrations.
+- `app/schemas.py` (unchanged): the wire layer. Pydantic request/response models, no I/O.
+
+Renamed the DB module rather than the Pydantic one, because `schemas.py` for Pydantic models is the FastAPI
+convention and `models.py` would wrongly suggest ORM models (there are none — this is raw `sqlite3`).
+`tests/test_schema.py` renamed to `tests/test_db_schema.py` to match. Used `git mv` so history follows.
+
+Updated all 7 code references plus doc references in `app/API_CONTRACT.md`, `app/schemas.py`,
+`app/repo.py`, `app/seed.py`, `app/routers/settings.py`, and the file tree in `README.md` (that last one
+was missed by the first grep pass — it lists filenames in a tree, not as import paths). The standalone
+entrypoint is now `uv run python -m app.db_schema`; verified it still bootstraps a database, run against a
+scratchpad path rather than the real DB per the lesson from the previous branch.
+
+Added a cross-reference to both module docstrings stating which layer each is and that constraints are
+enforced independently in the two — a field being required in `schemas.py` does not by itself make the
+column `NOT NULL` in `db_schema.py`, or vice versa. That distinction is exactly what the recent
+mandatory-category work had to handle in both places.
+
+**Correction to the `feat/mandatory-category-and-comment` entry above:** it recorded that the migration's
+discard notice uses `print()` because "the app has no logger configured". That was wrong — `app/main.py:18`
+defines `logger = logging.getLogger(__name__)` and uses it in the unhandled-exception handler. Discovered
+while fixing import ordering in `main.py` during this rename. The `print()` in
+`_migrate_entries_category_not_null` could therefore be a `logger.info(...)`; deliberately NOT changed here
+to keep this PR a pure rename, and left as a small follow-up.
+
+**Tests:** 136 backend passed (unchanged — no behaviour touched). `ruff check`, `ruff format`, `mypy app`
+clean. Import ordering in `app/main.py` needed a `ruff --fix` since `app.db_schema` sorts before
+`app.errors`.
+
+**Agents:** none. Mechanical rename driven entirely from the main thread — delegating it would have cost
+more than doing it.

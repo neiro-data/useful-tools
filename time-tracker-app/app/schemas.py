@@ -5,9 +5,13 @@ by ``app/api.py`` (route signatures) and will be imported by the backend-develop
 implementations. It intentionally contains **no I/O or business logic** — only validation and
 serialization concerns.
 
+This is the **wire** layer. Not to be confused with ``app/db_schema.py``, the **storage** layer
+(SQL DDL and migrations). Constraints are enforced independently in each: a field being required
+here does not by itself make the underlying column ``NOT NULL``, or vice versa.
+
 Conventions
 -----------
-- Timestamps are ISO-8601 UTC strings (matching ``app/schema.py``'s storage format), typed as
+- Timestamps are ISO-8601 UTC strings (matching ``app/db_schema.py``'s storage format), typed as
   ``AwareDatetime`` so pydantic parses/validates them but callers may still treat them as text at
   the storage boundary. Backend code is responsible for normalizing to UTC before persisting.
 - ``*Read`` models represent full API responses (include ``id`` and server-owned fields).
@@ -514,7 +518,7 @@ class WeekStart(StrEnum):
 
 class ExportFormat(StrEnum):
     """Default report export format. Values match ``settings.default_export_format``'s DB
-    ``CHECK`` constraint (see ``app/schema.py``) so a schema-valid value can never violate it."""
+    ``CHECK`` constraint (see ``app/db_schema.py``) so a schema-valid value can never violate it."""
 
     HTML = "html"
     CSV = "csv"
@@ -550,7 +554,7 @@ class SettingsUpdate(BaseModel):
 class SettingsRead(BaseModel):
     """Response representation of the singleton ``settings`` row.
 
-    There is always exactly one row (seeded at DB init, see ``app/schema.py``'s
+    There is always exactly one row (seeded at DB init, see ``app/db_schema.py``'s
     ``_seed_default_settings``); it is never created or deleted via the API, only read/updated.
     """
 

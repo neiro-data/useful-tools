@@ -1,5 +1,10 @@
 """Schema definition and idempotent migration/bootstrap for the time-tracker SQLite database.
 
+This is the **storage** layer: SQL DDL, indexes, and migrations describing how data is persisted.
+Not to be confused with ``app/schemas.py``, the **wire** layer (Pydantic models describing what the
+HTTP API accepts and returns). The two are enforced independently — e.g. ``entries.category_id`` is
+``NOT NULL`` here *and* required in ``schemas.EntryCreateManual`` there.
+
 Design notes
 ------------
 - **Timestamps are stored as ISO-8601 TEXT in UTC** (e.g. ``2026-07-13T14:30:00+00:00``). This is
@@ -271,7 +276,7 @@ def _default_db_path() -> Path:
 
 
 def main() -> None:
-    """Standalone entrypoint: ``uv run python -m app.schema``.
+    """Standalone entrypoint: ``uv run python -m app.db_schema``.
 
     Initializes the database file configured via ``TIME_TRACKER_DATABASE_PATH`` (or the default
     ``time_tracker.db`` in the current working directory).

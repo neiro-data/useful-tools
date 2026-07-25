@@ -1,10 +1,10 @@
-"""Tests for the SQLite schema bootstrap in ``app.schema``."""
+"""Tests for the SQLite schema bootstrap in ``app.db_schema``."""
 
 import sqlite3
 
 import pytest
 
-from app.schema import init_db
+from app.db_schema import init_db
 
 EXPECTED_TABLES = {
     "entries",
