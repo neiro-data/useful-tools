@@ -1,0 +1,251 @@
+{
+    "period": "month",
+    "start_date": "2026-06-01",
+    "end_date": "2026-06-30",
+    "timezone": "UTC",
+    "total_minutes": 6630,
+    "entry_count": 89,
+    "by_category": [
+        {
+            "category": {
+                "id": 5,
+                "name": "Learning",
+                "color": "#12B886",
+                "is_active": true,
+                "sort_order": 50
+            },
+            "total_minutes": 1560,
+            "entry_count": 21
+        },
+        {
+            "category": {
+                "id": 2,
+                "name": "Meetings - Technical",
+                "color": "#F59F00",
+                "is_active": true,
+                "sort_order": 20
+            },
+            "total_minutes": 1410,
+            "entry_count": 19
+        },
+        {
+            "category": {
+                "id": 1,
+                "name": "Meetings - Org",
+                "color": "#e3db38",
+                "is_active": true,
+                "sort_order": 10
+            },
+            "total_minutes": 1350,
+            "entry_count": 17
+        },
+        {
+            "category": {
+                "id": 4,
+                "name": "Technical",
+                "color": "#f31717",
+                "is_active": true,
+                "sort_order": 40
+            },
+            "total_minutes": 1230,
+            "entry_count": 17
+        },
+        {
+            "category": {
+                "id": 3,
+                "name": "Organizational",
+                "color": "#384ad2",
+                "is_active": true,
+                "sort_order": 30
+            },
+            "total_minutes": 1080,
+            "entry_count": 15
+        }
+    ],
+    "by_tag": [
+        {
+            "tag": {
+                "id": 4,
+                "name": "support",
+                "is_active": true
+            },
+            "total_minutes": 990,
+            "entry_count": 12
+        },
+        {
+            "tag": {
+                "id": 2,
+                "name": "review",
+                "is_active": true
+            },
+            "total_minutes": 825,
+            "entry_count": 13
+        },
+        {
+            "tag": {
+                "id": 3,
+                "name": "planning",
+                "is_active": true
+            },
+            "total_minutes": 795,
+            "entry_count": 10
+        },
+        {
+            "tag": {
+                "id": 1,
+                "name": "deep-work",
+                "is_active": true
+            },
+            "total_minutes": 780,
+            "entry_count": 12
+        },
+        {
+            "tag": {
+                "id": 8,
+                "name": "pairing",
+                "is_active": true
+            },
+            "total_minutes": 780,
+            "entry_count": 9
+        },
+        {
+            "tag": {
+                "id": 6,
+                "name": "docs",
+                "is_active": true
+            },
+            "total_minutes": 630,
+            "entry_count": 8
+        },
+        {
+            "tag": {
+                "id": 7,
+                "name": "on-call",
+                "is_active": true
+            },
+            "total_minutes": 480,
+            "entry_count": 7
+        },
+        {
+            "tag": {
+                "id": 5,
+                "name": "recruiting",
+                "is_active": true
+            },
+            "total_minutes": 450,
+            "entry_count": 7
+        }
+    ],
+    "by_day": [
+        {
+            "date": "2026-06-01",
+            "total_minutes": 225,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-06-02",
+            "total_minutes": 300,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-06-03",
+            "total_minutes": 375,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-06-04",
+            "total_minutes": 240,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-06-05",
+            "total_minutes": 195,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-06-08",
+            "total_minutes": 255,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-06-09",
+            "total_minutes": 255,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-06-10",
+            "total_minutes": 315,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-06-11",
+            "total_minutes": 135,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-06-12",
+            "total_minutes": 420,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-06-15",
+            "total_minutes": 270,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-06-16",
+            "total_minutes": 210,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-06-17",
+            "total_minutes": 210,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-06-18",
+            "total_minutes": 390,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-06-19",
+            "total_minutes": 300,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-06-22",
+            "total_minutes": 405,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-06-23",
+            "total_minutes": 210,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-06-24",
+            "total_minutes": 465,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-06-25",
+            "total_minutes": 420,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-06-26",
+            "total_minutes": 300,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-06-29",
+            "total_minutes": 375,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-06-30",
+            "total_minutes": 360,
+            "entry_count": 5
+        }
+    ]
+}

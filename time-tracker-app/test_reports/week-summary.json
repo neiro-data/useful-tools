@@ -1,0 +1,166 @@
+{
+    "period": "week",
+    "start_date": "2026-06-15",
+    "end_date": "2026-06-21",
+    "timezone": "UTC",
+    "total_minutes": 1380,
+    "entry_count": 20,
+    "by_category": [
+        {
+            "category": {
+                "id": 4,
+                "name": "Technical",
+                "color": "#f31717",
+                "is_active": true,
+                "sort_order": 40
+            },
+            "total_minutes": 360,
+            "entry_count": 4
+        },
+        {
+            "category": {
+                "id": 5,
+                "name": "Learning",
+                "color": "#12B886",
+                "is_active": true,
+                "sort_order": 50
+            },
+            "total_minutes": 330,
+            "entry_count": 6
+        },
+        {
+            "category": {
+                "id": 1,
+                "name": "Meetings - Org",
+                "color": "#e3db38",
+                "is_active": true,
+                "sort_order": 10
+            },
+            "total_minutes": 285,
+            "entry_count": 3
+        },
+        {
+            "category": {
+                "id": 3,
+                "name": "Organizational",
+                "color": "#384ad2",
+                "is_active": true,
+                "sort_order": 30
+            },
+            "total_minutes": 255,
+            "entry_count": 5
+        },
+        {
+            "category": {
+                "id": 2,
+                "name": "Meetings - Technical",
+                "color": "#F59F00",
+                "is_active": true,
+                "sort_order": 20
+            },
+            "total_minutes": 150,
+            "entry_count": 2
+        }
+    ],
+    "by_tag": [
+        {
+            "tag": {
+                "id": 1,
+                "name": "deep-work",
+                "is_active": true
+            },
+            "total_minutes": 195,
+            "entry_count": 5
+        },
+        {
+            "tag": {
+                "id": 2,
+                "name": "review",
+                "is_active": true
+            },
+            "total_minutes": 180,
+            "entry_count": 3
+        },
+        {
+            "tag": {
+                "id": 8,
+                "name": "pairing",
+                "is_active": true
+            },
+            "total_minutes": 150,
+            "entry_count": 2
+        },
+        {
+            "tag": {
+                "id": 4,
+                "name": "support",
+                "is_active": true
+            },
+            "total_minutes": 150,
+            "entry_count": 2
+        },
+        {
+            "tag": {
+                "id": 3,
+                "name": "planning",
+                "is_active": true
+            },
+            "total_minutes": 150,
+            "entry_count": 2
+        },
+        {
+            "tag": {
+                "id": 6,
+                "name": "docs",
+                "is_active": true
+            },
+            "total_minutes": 105,
+            "entry_count": 2
+        },
+        {
+            "tag": {
+                "id": 5,
+                "name": "recruiting",
+                "is_active": true
+            },
+            "total_minutes": 30,
+            "entry_count": 1
+        },
+        {
+            "tag": {
+                "id": 7,
+                "name": "on-call",
+                "is_active": true
+            },
+            "total_minutes": 30,
+            "entry_count": 1
+        }
+    ],
+    "by_day": [
+        {
+            "date": "2026-06-15",
+            "total_minutes": 270,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-06-16",
+            "total_minutes": 210,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-06-17",
+            "total_minutes": 210,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-06-18",
+            "total_minutes": 390,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-06-19",
+            "total_minutes": 300,
+            "entry_count": 4
+        }
+    ]
+}

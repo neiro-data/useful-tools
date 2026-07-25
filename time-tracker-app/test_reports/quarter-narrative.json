@@ -1,0 +1,15 @@
+{
+    "period": "quarter",
+    "start_date": "2026-04-01",
+    "end_date": "2026-06-30",
+    "timezone": "UTC",
+    "narrative": "You tracked 336h 45m across 265 entries this quarter (2026-04-01 to 2026-06-30). Most of your time went to Technical (81h 0m, 24%), followed by Learning (75h 30m). Tuesday (2026-05-12) was your busiest day at 8h 15m. You averaged 5h 11m per active day. Most-used tag: pairing (50h 0m across tagged entries).",
+    "highlights": [
+        "Total: 336h 45m across 265 entries",
+        "Top category: Technical (81h 0m, 24%)",
+        "Second category: Learning (75h 30m)",
+        "Busiest day: Tuesday, 2026-05-12 (8h 15m)",
+        "Daily average: 5h 11m per active day",
+        "Most-used tag: pairing (50h 0m across tagged entries)"
+    ]
+}

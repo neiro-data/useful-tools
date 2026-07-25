@@ -1,0 +1,466 @@
+{
+    "period": "quarter",
+    "start_date": "2026-04-01",
+    "end_date": "2026-06-30",
+    "timezone": "UTC",
+    "total_minutes": 20205,
+    "entry_count": 265,
+    "by_category": [
+        {
+            "category": {
+                "id": 4,
+                "name": "Technical",
+                "color": "#f31717",
+                "is_active": true,
+                "sort_order": 40
+            },
+            "total_minutes": 4860,
+            "entry_count": 64
+        },
+        {
+            "category": {
+                "id": 5,
+                "name": "Learning",
+                "color": "#12B886",
+                "is_active": true,
+                "sort_order": 50
+            },
+            "total_minutes": 4530,
+            "entry_count": 57
+        },
+        {
+            "category": {
+                "id": 3,
+                "name": "Organizational",
+                "color": "#384ad2",
+                "is_active": true,
+                "sort_order": 30
+            },
+            "total_minutes": 3675,
+            "entry_count": 49
+        },
+        {
+            "category": {
+                "id": 1,
+                "name": "Meetings - Org",
+                "color": "#e3db38",
+                "is_active": true,
+                "sort_order": 10
+            },
+            "total_minutes": 3645,
+            "entry_count": 46
+        },
+        {
+            "category": {
+                "id": 2,
+                "name": "Meetings - Technical",
+                "color": "#F59F00",
+                "is_active": true,
+                "sort_order": 20
+            },
+            "total_minutes": 3495,
+            "entry_count": 49
+        }
+    ],
+    "by_tag": [
+        {
+            "tag": {
+                "id": 8,
+                "name": "pairing",
+                "is_active": true
+            },
+            "total_minutes": 3000,
+            "entry_count": 37
+        },
+        {
+            "tag": {
+                "id": 2,
+                "name": "review",
+                "is_active": true
+            },
+            "total_minutes": 2640,
+            "entry_count": 36
+        },
+        {
+            "tag": {
+                "id": 5,
+                "name": "recruiting",
+                "is_active": true
+            },
+            "total_minutes": 2520,
+            "entry_count": 31
+        },
+        {
+            "tag": {
+                "id": 4,
+                "name": "support",
+                "is_active": true
+            },
+            "total_minutes": 2475,
+            "entry_count": 32
+        },
+        {
+            "tag": {
+                "id": 1,
+                "name": "deep-work",
+                "is_active": true
+            },
+            "total_minutes": 2355,
+            "entry_count": 31
+        },
+        {
+            "tag": {
+                "id": 7,
+                "name": "on-call",
+                "is_active": true
+            },
+            "total_minutes": 2055,
+            "entry_count": 28
+        },
+        {
+            "tag": {
+                "id": 6,
+                "name": "docs",
+                "is_active": true
+            },
+            "total_minutes": 2055,
+            "entry_count": 25
+        },
+        {
+            "tag": {
+                "id": 3,
+                "name": "planning",
+                "is_active": true
+            },
+            "total_minutes": 1740,
+            "entry_count": 24
+        }
+    ],
+    "by_day": [
+        {
+            "date": "2026-04-01",
+            "total_minutes": 315,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-04-02",
+            "total_minutes": 285,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-04-03",
+            "total_minutes": 240,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-04-06",
+            "total_minutes": 300,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-04-07",
+            "total_minutes": 285,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-04-08",
+            "total_minutes": 360,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-04-09",
+            "total_minutes": 195,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-04-10",
+            "total_minutes": 420,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-04-13",
+            "total_minutes": 255,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-04-14",
+            "total_minutes": 210,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-04-15",
+            "total_minutes": 390,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-04-16",
+            "total_minutes": 390,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-04-17",
+            "total_minutes": 405,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-04-20",
+            "total_minutes": 315,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-04-21",
+            "total_minutes": 285,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-04-22",
+            "total_minutes": 135,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-04-23",
+            "total_minutes": 420,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-04-24",
+            "total_minutes": 270,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-04-27",
+            "total_minutes": 345,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-04-28",
+            "total_minutes": 210,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-04-29",
+            "total_minutes": 345,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-04-30",
+            "total_minutes": 435,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-05-01",
+            "total_minutes": 285,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-05-04",
+            "total_minutes": 120,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-05-05",
+            "total_minutes": 480,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-05-06",
+            "total_minutes": 435,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-05-07",
+            "total_minutes": 240,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-05-08",
+            "total_minutes": 285,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-05-11",
+            "total_minutes": 180,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-05-12",
+            "total_minutes": 495,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-05-13",
+            "total_minutes": 390,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-05-14",
+            "total_minutes": 405,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-05-15",
+            "total_minutes": 375,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-05-18",
+            "total_minutes": 135,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-05-19",
+            "total_minutes": 360,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-05-20",
+            "total_minutes": 315,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-05-21",
+            "total_minutes": 360,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-05-22",
+            "total_minutes": 255,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-05-25",
+            "total_minutes": 300,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-05-26",
+            "total_minutes": 405,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-05-27",
+            "total_minutes": 240,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-05-28",
+            "total_minutes": 330,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-05-29",
+            "total_minutes": 375,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-06-01",
+            "total_minutes": 225,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-06-02",
+            "total_minutes": 300,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-06-03",
+            "total_minutes": 375,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-06-04",
+            "total_minutes": 240,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-06-05",
+            "total_minutes": 195,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-06-08",
+            "total_minutes": 255,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-06-09",
+            "total_minutes": 255,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-06-10",
+            "total_minutes": 315,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-06-11",
+            "total_minutes": 135,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-06-12",
+            "total_minutes": 420,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-06-15",
+            "total_minutes": 270,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-06-16",
+            "total_minutes": 210,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-06-17",
+            "total_minutes": 210,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-06-18",
+            "total_minutes": 390,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-06-19",
+            "total_minutes": 300,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-06-22",
+            "total_minutes": 405,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-06-23",
+            "total_minutes": 210,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-06-24",
+            "total_minutes": 465,
+            "entry_count": 5
+        },
+        {
+            "date": "2026-06-25",
+            "total_minutes": 420,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-06-26",
+            "total_minutes": 300,
+            "entry_count": 3
+        },
+        {
+            "date": "2026-06-29",
+            "total_minutes": 375,
+            "entry_count": 4
+        },
+        {
+            "date": "2026-06-30",
+            "total_minutes": 360,
+            "entry_count": 5
+        }
+    ]
+}
