@@ -38,7 +38,7 @@ describe("DateTimePicker", () => {
     expect(onChange).toHaveBeenCalledWith("2026-08-01T09:05");
   });
 
-  it("only offers 00-23 hour options and 00,05..55 minute options", () => {
+  it("only offers 00-23 hour options and 00-59 minute options", () => {
     render(<DateTimePicker value="2026-07-13T09:05" onChange={vi.fn()} label="Start" />);
 
     const hourOptions = screen
@@ -51,37 +51,13 @@ describe("DateTimePicker", () => {
       .getAllByRole<HTMLOptionElement>("option")
       .filter((option) => option.closest("select") === screen.getByLabelText("Start minute"))
       .map((option) => option.value);
-    expect(minuteOptions).toEqual(["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"]);
+    expect(minuteOptions).toEqual(Array.from({ length: 60 }, (_, m) => m.toString().padStart(2, "0")));
   });
 
-  it("keeps a non-5-minute-step value selectable instead of dropping it", () => {
+  it("keeps any in-range minute selectable", () => {
     render(<DateTimePicker value="2026-07-13T09:37" onChange={vi.fn()} label="Start" />);
 
     expect(screen.getByLabelText("Start minute")).toHaveValue("37");
-  });
-
-  it("injects the off-grid minute into the option list without dropping the standard steps", () => {
-    render(<DateTimePicker value="2026-07-13T09:37" onChange={vi.fn()} label="Start" />);
-
-    const minuteOptions = screen
-      .getAllByRole<HTMLOptionElement>("option")
-      .filter((option) => option.closest("select") === screen.getByLabelText("Start minute"))
-      .map((option) => option.value);
-    expect(minuteOptions).toEqual([
-      "00",
-      "05",
-      "10",
-      "15",
-      "20",
-      "25",
-      "30",
-      "35",
-      "37",
-      "40",
-      "45",
-      "50",
-      "55",
-    ]);
   });
 
   it("falls back to 00 for an out-of-range minute instead of injecting it", () => {

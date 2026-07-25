@@ -11,10 +11,7 @@ interface DateTimePickerProps {
 }
 
 const HOURS = Array.from({ length: 24 }, (_, hour) => hour.toString().padStart(2, "0"));
-const MINUTE_STEP = 5;
-const MINUTES = Array.from({ length: 60 / MINUTE_STEP }, (_, index) =>
-  (index * MINUTE_STEP).toString().padStart(2, "0"),
-);
+const MINUTES = Array.from({ length: 60 }, (_, minute) => minute.toString().padStart(2, "0"));
 
 interface ParsedValue {
   date: string;
@@ -51,16 +48,11 @@ function todayIso(): string {
 
 /** Shared 24-hour date/hour/minute picker used by `TimerWidget`'s manual mode and
  * `ManualEntryForm`, replacing the native `datetime-local` input (whose browser-rendered popover
- * intercepted 1-6 keystrokes and offered no minute granularity control). Emits/accepts the same
+ * intercepted 1-6 keystrokes and offered no minute granularity control). Minutes are offered at
+ * 1-minute granularity (00-59), so any valid value is directly selectable. Emits/accepts the same
  * `YYYY-MM-DDTHH:mm` string so callers doing `new Date(value).toISOString()` are unaffected. */
 export function DateTimePicker({ value, onChange, label }: DateTimePickerProps): ReactElement {
   const { date, hour, minute } = parseValue(value);
-
-  // If the incoming minute isn't one of the 5-minute-step options (e.g. an upstream default of
-  // :37), inject it as an extra option so the select doesn't silently coerce it to something else.
-  const minuteOptions = MINUTES.includes(minute)
-    ? MINUTES
-    : [...MINUTES, minute].sort((a, b) => Number(a) - Number(b));
 
   function emit(nextDate: string, nextHour: string, nextMinute: string): void {
     onChange(`${nextDate}T${nextHour}:${nextMinute}`);
@@ -96,7 +88,7 @@ export function DateTimePicker({ value, onChange, label }: DateTimePickerProps):
         onChange={(event) => emit(date, hour, event.target.value)}
         aria-label={`${label} minute`}
       >
-        {minuteOptions.map((option) => (
+        {MINUTES.map((option) => (
           <option key={option} value={option}>
             {option}
           </option>
