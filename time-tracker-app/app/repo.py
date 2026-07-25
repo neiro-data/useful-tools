@@ -89,6 +89,42 @@ def transaction(db: sqlite3.Connection) -> Generator[None, None, None]:
         db.execute("COMMIT")
 
 
+@contextmanager
+def read_snapshot(db: sqlite3.Connection) -> Generator[None, None, None]:
+    """Explicit, deferred-lock transaction for multi-statement, read-only aggregation.
+
+    ``db.isolation_level`` is set to ``None`` (autocommit) by ``app.deps.get_db``, so without an
+    explicit transaction each ``SELECT`` here would commit independently, letting a concurrent
+    writer interleave between them and produce an internally inconsistent read (e.g. an entries
+    list and a running-timer read that reflect different points in time). ``BEGIN DEFERRED`` (not
+    ``BEGIN IMMEDIATE``, which is reserved for guarded writes in :func:`transaction`) takes no lock
+    up front; under WAL mode it establishes a stable read snapshot at the first statement that
+    actually reads, so every ``SELECT`` inside this block sees the same consistent view without
+    blocking concurrent writers. Always ends the transaction (``COMMIT`` on success, ``ROLLBACK``
+    on exception) so no read transaction is left open, which would otherwise prevent WAL
+    checkpointing.
+
+    Not re-entrant: SQLite has no nested transactions, so calling this from inside another
+    ``read_snapshot`` or a :func:`transaction` block would raise the opaque
+    ``cannot start a transaction within a transaction``. The guard below turns that into an
+    explicit error instead — relevant because this wraps a whole route handler, so a repo helper
+    called from within it must not open a transaction of its own.
+    """
+    if db.in_transaction:
+        raise RuntimeError(
+            "read_snapshot() cannot be nested inside another transaction: SQLite has no nested "
+            "transactions. Restructure so only the outermost caller opens one."
+        )
+    db.execute("BEGIN DEFERRED")
+    try:
+        yield
+    except Exception:
+        db.execute("ROLLBACK")
+        raise
+    else:
+        db.execute("COMMIT")
+
+
 # --- Row -> model serialization ---------------------------------------------------------------
 
 
