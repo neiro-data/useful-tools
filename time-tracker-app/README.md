@@ -43,6 +43,97 @@ time-tracker-app/
 └── uv.lock
 ```
 
+## Database
+
+SQLite, six tables. The diagram below is a **Mermaid** `erDiagram` embedded directly in this file —
+GitHub renders it natively, so there is no image to regenerate and keep in sync, and the diff of a
+schema change is readable in review. The canonical DDL lives in `app/db_schema.py`; this is a view
+of it, so update both together.
+
+```mermaid
+erDiagram
+    categories ||--o{ entries : "categorizes"
+    entries    ||--o{ entry_tags : "tagged by"
+    tags       ||--o{ entry_tags : "applied to"
+
+    categories {
+        INTEGER id PK
+        TEXT    name UK "NOT NULL, unique - also the seed match key"
+        TEXT    color "nullable, hex or CSS name, max 32 chars"
+        INTEGER is_active "NOT NULL, default 1 - UI-owned, never seeded"
+        INTEGER sort_order "NOT NULL, default 0 - spaced in gaps of 10"
+    }
+
+    tags {
+        INTEGER id PK
+        TEXT    name UK "NOT NULL, unique - created on first use"
+        INTEGER is_active "NOT NULL, default 1"
+    }
+
+    entries {
+        INTEGER id PK
+        TEXT    title "NOT NULL"
+        TEXT    notes "nullable"
+        INTEGER category_id FK "NOT NULL, ON DELETE RESTRICT"
+        TEXT    start_ts "NOT NULL, ISO-8601 UTC"
+        TEXT    end_ts "nullable - NULL while a timer is running"
+        REAL    duration_minutes "nullable until the entry is closed"
+        TEXT    entry_mode "NOT NULL, CHECK in (timer, manual)"
+        TEXT    created_at "NOT NULL, ISO-8601 UTC"
+        TEXT    updated_at "NOT NULL, ISO-8601 UTC"
+    }
+
+    entry_tags {
+        INTEGER entry_id PK,FK "ON DELETE CASCADE"
+        INTEGER tag_id PK,FK "ON DELETE CASCADE"
+    }
+
+    report_exports {
+        INTEGER id PK
+        TEXT    report_type "NOT NULL, CHECK in (weekly, monthly, quarterly)"
+        TEXT    period_start "NOT NULL"
+        TEXT    period_end "NOT NULL"
+        TEXT    format "NOT NULL, CHECK in (html, csv, pdf, md)"
+        TEXT    created_at "NOT NULL, ISO-8601 UTC"
+        TEXT    file_path "NOT NULL"
+    }
+
+    settings {
+        INTEGER id PK
+        TEXT    default_entry_mode "NOT NULL, CHECK in (timer, manual)"
+        TEXT    week_starts_on "NOT NULL"
+        TEXT    default_export_format "NOT NULL, CHECK in (html, csv, pdf, md)"
+        TEXT    database_label "NOT NULL"
+        TEXT    timezone "NOT NULL - drives day boundaries"
+    }
+```
+
+`report_exports` and `settings` stand alone — neither has a foreign key. `settings` holds exactly
+one row, seeded on first bootstrap by `init_db`.
+
+**Conventions worth knowing before writing queries:**
+
+- **Timestamps are ISO-8601 TEXT in UTC** (`2026-07-13T14:30:00+00:00`). They sort
+  lexicographically the same as chronologically and survive CSV/JSON round-trips. Callers
+  normalize to UTC on write and localize on display using `settings.timezone`.
+- **Booleans are `INTEGER` 0/1** — SQLite has no boolean type.
+- **Enum-like columns use `CHECK` constraints**, not lookup tables: the value sets are small,
+  fixed, and app-defined rather than user-editable.
+- **Foreign keys are enforced**, but only because every connection sets `PRAGMA foreign_keys = ON`
+  (SQLite defaults it off, per-connection). Ad-hoc `sqlite3` shell sessions do *not* get this for
+  free — set it yourself before mutating data.
+
+Indexes beyond the implicit primary keys and `UNIQUE` constraints:
+
+| Index | Column(s) | Serves |
+| --- | --- | --- |
+| `idx_entries_start_ts` | `entries (start_ts)` | date-range scans — the hottest pattern (Today/Week/Month/Reports) |
+| `idx_entries_category_id` | `entries (category_id)` | filtering time by category, and the FK lookup |
+| `idx_entry_tags_tag_id` | `entry_tags (tag_id)` | the reverse join: "all entries with tag Y" |
+
+`entry_tags`' primary key `(entry_id, tag_id)` already indexes `entry_id` first, which is why only
+the reverse direction needs an explicit index.
+
 ## Requirements
 
 - Python 3.11+ and [`uv`](https://docs.astral.sh/uv/) for the backend.
