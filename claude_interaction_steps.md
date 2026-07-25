@@ -29,3 +29,9 @@
 - Added/updated tests: `DateTimePicker.test.tsx` — new cases for out-of-range minute ("61") and hour ("99") falling back to "00" instead of being injected.
 - Pipeline: architect-orchestrator (plan) -> react-specialist (implementation of the three review fixes) -> test-automator (test additions) -> code-reviewer (review that raised the three fixes above).
 - Gates: npm run test (96 tests passing), npm run lint — both green. Known/out-of-scope: `npm run build` fails on a pre-existing tsc error in `ReportsPage.test.tsx` (missing `entry_count`), which also exists on `main`; left untouched.
+
+## Branch `fix/minute-step-1`
+
+Bug fix: the minute `<select>` in `DateTimePicker` (used by `ManualEntryForm` and `TimerWidget`
+manual mode) offered only 5-minute steps. Changed to 1-minute granularity (00-59), which also made
+the "inject an off-grid minute" fallback dead code — removed. Tests updated accordingly.
