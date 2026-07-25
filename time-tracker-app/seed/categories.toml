@@ -1,0 +1,40 @@
+# Starter categories for the time tracker.
+#
+# Edit this file, then apply it with:
+#
+#     uv run python -m app.seed            # apply
+#     uv run python -m app.seed --dry-run  # preview, writes nothing
+#
+# Semantics: `name` is UNIQUE in the database and is the match key. Re-running is safe --
+# categories missing from the database are inserted, and ones already there have their `color`
+# and `sort_order` updated to match this file. Nothing is ever deleted.
+#
+# One exception to "this file wins": a category you retire in the UI (via
+# POST /categories/{id}/deactivate) stays retired. Re-seeding will not bring it back.
+#
+# `sort_order` is spaced in gaps of 10 so you can slot a new category between two existing ones
+# without renumbering the whole file. Lower values sort first.
+#
+# `color` is a free-form token (hex code or CSS name), max 32 characters, and may be omitted.
+
+[[category]]
+name = "Deep work"
+color = "#4C6EF5"
+sort_order = 10
+
+[[category]]
+name = "Meetings"
+color = "#F59F00"
+sort_order = 20
+
+# Keep this one broad to start. If it grows past a fifth of your logged time, that is the
+# signal to split it into something more specific.
+[[category]]
+name = "Admin"
+color = "#868E96"
+sort_order = 30
+
+[[category]]
+name = "Learning"
+color = "#12B886"
+sort_order = 40
