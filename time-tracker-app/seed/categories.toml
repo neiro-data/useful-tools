@@ -18,23 +18,27 @@
 # `color` is a free-form token (hex code or CSS name), max 32 characters, and may be omitted.
 
 [[category]]
-name = "Deep work"
-color = "#4C6EF5"
+name = "Meetings - Org"
+color = "#e3db38"
 sort_order = 10
 
 [[category]]
-name = "Meetings"
+name = "Meetings - Technical"
 color = "#F59F00"
 sort_order = 20
 
-# Keep this one broad to start. If it grows past a fifth of your logged time, that is the
-# signal to split it into something more specific.
 [[category]]
-name = "Admin"
-color = "#868E96"
+name = "Organizational"
+color = "#384ad2"
 sort_order = 30
+
+[[category]]
+name = "Technical"
+color = "#f31717"
+sort_order = 40
 
 [[category]]
 name = "Learning"
 color = "#12B886"
-sort_order = 40
+sort_order = 50
+
