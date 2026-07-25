@@ -1,6 +1,6 @@
 # First-run walkthrough for the time tracker
 
-## Starting the app
+## Steo 0 - Starting the app
 
 Both servers are already running, but for future sessions, from `time-tracker-app/`:
 
