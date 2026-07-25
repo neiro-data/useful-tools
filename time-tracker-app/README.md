@@ -30,6 +30,7 @@ time-tracker-app/
 │   ├── api.py       # root API router (feature routers plug in here)
 │   ├── db.py        # SQLite connection helper
 │   ├── db_schema.py   # SQLite DDL, indexes, idempotent init + migrations
+│   ├── dummy_data.py  # generates a disposable, git-ignored sample database
 │   ├── schemas.py     # Pydantic request/response models (the HTTP contract)
 │   ├── API_CONTRACT.md # endpoint contract (paths, bodies, status codes, error envelope)
 │   └── routers/       # categories, tags, entries, timer, today, reports, settings, exports
@@ -81,6 +82,40 @@ uv run ruff format .     # format
 uv run mypy app          # type-check
 uv run pytest -q         # run tests
 ```
+
+### Dummy database for experiments
+
+The automated tests already isolate themselves (each one gets a fresh SQLite file in `tmp_path`).
+Poking at the app *by hand* does not: curling an endpoint, opening the SPA, or running a script all
+hit whatever `TIME_TRACKER_DATABASE_PATH` points at, which by default is your real
+`time_tracker.db`. Generate a disposable database and point at that instead:
+
+```bash
+uv run python -m app.dummy_data                  # write ./dummy.db with ~4 weeks of sample data
+uv run python -m app.dummy_data --days 90        # a quarter, so Reports has something to chew on
+uv run python -m app.dummy_data --running-timer  # also leave one entry open, as if a timer were running
+uv run python -m app.dummy_data --reset          # delete the file and rebuild from scratch
+```
+
+Then run the backend against it:
+
+```bash
+TIME_TRACKER_DATABASE_PATH=dummy.db uv run uvicorn app.main:app --reload
+```
+
+`dummy.db` is git-ignored — it is regenerated, never committed.
+
+**It will not clobber your real data.** The generated database is branded: its
+`settings.database_label` is set to `DUMMY DATA (app.dummy_data)`. Before writing to or deleting an
+existing file, the generator reads that label back and refuses unless it matches — so
+`--path time_tracker.db` fails with an error rather than overwriting your entries. Anything that is
+not a time-tracker database is refused too. The guard is on content, not filename, so renaming a
+file cannot defeat it.
+
+Generation is seeded (`--seed`, default `20260713`): the same arguments always produce the same
+database, which keeps comparisons and screenshots stable. Categories come from
+`seed/categories.toml`, so the dummy data uses your real taxonomy; entries land on weekdays only,
+in quarter-hour blocks from 09:00, with 0–2 tags each.
 
 ## Configuration
 
