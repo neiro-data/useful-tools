@@ -396,3 +396,60 @@ That string exists only at `app/main.py:89` (the catch-all 500 handler), but all
 calls return 200 to curl, so it was not reproducible from the shell. Needs the `logger.exception` traceback
 from the uvicorn terminal to diagnose. Not addressed by this branch — an empty category list was ruled out
 as the cause.
+
+---
+
+## Branch: `fix/sqlite-thread-affinity`
+
+**Goal:** fix `sqlite3.ProgrammingError: SQLite objects created in a thread can only be used in that same
+thread` returning 500s from the API under `npm run dev`. **This closes the "Still open" item from the
+previous entry** — the intermittent "An unexpected error occurred." banner was this bug all along, surfaced
+via the catch-all 500 handler at `app/main.py:89`.
+
+**Root cause:** `_connect()` in `app/db.py` called `sqlite3.connect()` with the default
+`check_same_thread=True`. The sync yield-dependency `get_db` (`app/deps.py`) and the sync `def` route
+handlers are dispatched by Starlette as *separate* threadpool tasks with no thread affinity, so the
+connection was created on one thread and used on another.
+
+**Why it was invisible to the test suite:** `TestClient` runs an entire request inside a single portal
+thread, so the dependency and the handler always shared a thread. The exact request that failed under
+uvicorn returned 200 under `TestClient`. No `TestClient`-based test could ever have caught this.
+
+**Reproduction (before fix):** 30 parallel `GET /tags` against real uvicorn → 25 × 500, 5 × 200. One
+sequential request → 200, which is why it looked intermittent.
+
+**Fix (`app/db.py` only):** `check_same_thread=False` (safe — one connection per request, used strictly
+serially across threads, never shared between concurrent requests), `timeout=30` busy timeout (needed
+because unblocking the threading issue exposes real write contention under autocommit), and
+`PRAGMA journal_mode = WAL` so readers don't block on writers.
+
+**Verified after fix:** 30 parallel reads → 30 × 200; 40 mixed parallel `POST /tags` + `GET /today` →
+all 200/201, zero `ProgrammingError`, zero `database is locked`. `ruff format` + `ruff check` clean,
+`mypy app` clean (20 files), `pytest` 117 passed.
+
+**Regression test:** `tests/test_sqlite_thread_affinity.py` (new) launches the app under real uvicorn in a
+subprocess on an ephemeral port against a `tmp_path` database, then fires concurrent requests through a
+thread pool. Marked `slow` (marker registered in `pyproject.toml`) so it can be deselected. Independently
+confirmed it FAILS with `check_same_thread=False` removed and passes with it — a `TestClient` test here
+would have been worthless.
+
+**`.gitignore`:** added `*.db-wal` / `*.db-shm`, the sidecar files WAL mode creates.
+
+**Router audit (all 8 DB-touching routers, one agent each):** no blocking issues. No router uses its
+connection from two threads *concurrently* (only serial handoff), no `BEGIN IMMEDIATE` block straddles a
+thread switch or leaks on an error path, and no endpoint returns a lazy cursor consumed after the handler
+returns (checked specifically in `exports.py` / `reports.py`).
+
+**Pre-existing issues found during the audit, NOT addressed here:**
+- `today.py` `get_today` issues 5+ unguarded SELECTs with no snapshot; now that real concurrency works, a
+  concurrent write can interleave and yield an internally inconsistent response. Wants a deferred
+  transaction if "Today" is meant to be one consistent instant.
+- Check-then-insert TOCTOU in `tags.py` `create_tag`/`update_tag` and `categories.py`
+  `create_category`/`update_category`. Currently fails *safely* (409) via the UNIQUE constraint +
+  `IntegrityError` catch, so it's papered over rather than correct.
+- `entries.py` `delete_entry` does check-then-delete without a `transaction()` wrapper — benign
+  (idempotent) but inconsistent with the rest of the router.
+- `exports.py` `db.backup()` holds a read lock for the duration of the copy; fine now, notable for a large DB.
+
+**Agents:** `python-pro` ×9 (1 implement, 8 read-only per-router audits), `test-automator` ×1,
+`code-reviewer` ×1.
