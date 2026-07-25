@@ -57,6 +57,15 @@ describe("CategoryPicker", () => {
     expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
   });
 
+  it("renders no 'No category' option and a starred label when required", () => {
+    render(<CategoryPicker categories={makeCategories()} value={null} onChange={vi.fn()} required />);
+
+    expect(screen.getByLabelText("Category *")).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Category *"));
+
+    expect(screen.queryByText("No category")).not.toBeInTheDocument();
+  });
+
   it("closes the popover on Escape", () => {
     render(<CategoryPicker categories={makeCategories()} value={null} onChange={vi.fn()} />);
 

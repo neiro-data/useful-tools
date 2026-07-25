@@ -5,7 +5,7 @@ single-active-timer rule.
 from fastapi import APIRouter
 
 from app.deps import DbDep
-from app.errors import ConflictError
+from app.errors import ConflictError, ValidationError
 from app.repo import (
     compute_duration_minutes,
     entry_from_row,
@@ -87,6 +87,12 @@ def stop_timer(payload: TimerStopRequest, db: DbDep) -> EntryRead:
         fields = payload.model_dump(exclude_unset=True)
         title = fields.get("title", row["title"])
         notes = fields.get("notes", row["notes"])
+
+        if "category_id" in fields and fields["category_id"] is None:
+            raise ValidationError(
+                "category_id cannot be null",
+                fields=[{"loc": ["body", "category_id"], "msg": "category_id cannot be null"}],
+            )
         category_id = fields.get("category_id", row["category_id"])
         tag_ids: list[int] | None = fields.get("tag_ids", None)
 

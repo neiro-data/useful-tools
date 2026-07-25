@@ -68,4 +68,17 @@ describe("EntryRow", () => {
 
     expect(onDelete).toHaveBeenCalled();
   });
+
+  it("edits a saved entry's comment and forwards it to onSave", () => {
+    const onSave = vi.fn().mockResolvedValue(undefined);
+    render(
+      <EntryRow entry={makeEntry()} categories={[]} knownTags={[]} onSave={onSave} onDelete={vi.fn()} />,
+    );
+
+    fireEvent.click(screen.getByTestId("entry-row"));
+    fireEvent.change(screen.getByLabelText("Entry comment"), { target: { value: "Ping client" } });
+    fireEvent.click(screen.getByText("Save"));
+
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ notes: "Ping client" }));
+  });
 });

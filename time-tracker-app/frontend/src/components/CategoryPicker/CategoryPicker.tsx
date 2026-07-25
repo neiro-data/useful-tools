@@ -9,6 +9,10 @@ interface CategoryPickerProps {
   value: CategoryRead | null;
   onChange: (category: CategoryRead | null) => void;
   label?: string;
+  /** When true, hides the "No category" clear option so a selection can never be removed, and
+   * marks the placeholder as required. Category is mandatory on every entry/timer (see
+   * `app/schemas.py`), so any required call site must set this. */
+  required?: boolean;
 }
 
 interface PopoverPosition {
@@ -30,6 +34,7 @@ export function CategoryPicker({
   value,
   onChange,
   label = "Category",
+  required = false,
 }: CategoryPickerProps): ReactElement {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<PopoverPosition | null>(null);
@@ -92,6 +97,7 @@ export function CategoryPicker({
   }, [open]);
 
   const popoverStyle: PopoverPosition | null = position;
+  const placeholderLabel = required ? `${label} *` : label;
 
   return (
     <div className={styles.root} ref={rootRef}>
@@ -102,9 +108,14 @@ export function CategoryPicker({
         onClick={() => setOpen((prev) => !prev)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label={label}
+        aria-required={required || undefined}
+        aria-label={placeholderLabel}
       >
-        {value ? <CategoryChip category={value} /> : <span className={styles.placeholder}>{label} ▾</span>}
+        {value ? (
+          <CategoryChip category={value} />
+        ) : (
+          <span className={styles.placeholder}>{placeholderLabel} ▾</span>
+        )}
       </button>
       {open &&
         popoverStyle &&
@@ -120,18 +131,20 @@ export function CategoryPicker({
               transform: popoverStyle.openAbove ? "translateY(-100%)" : undefined,
             }}
           >
-            <li>
-              <button
-                type="button"
-                className={styles.clearOption}
-                onClick={() => {
-                  onChange(null);
-                  setOpen(false);
-                }}
-              >
-                No category
-              </button>
-            </li>
+            {!required && (
+              <li>
+                <button
+                  type="button"
+                  className={styles.clearOption}
+                  onClick={() => {
+                    onChange(null);
+                    setOpen(false);
+                  }}
+                >
+                  No category
+                </button>
+              </li>
+            )}
             {categories.map((category) => (
               <li key={category.id}>
                 <button

@@ -29,6 +29,10 @@ def _make_entry(
     category_id: int | None = None,
     tag_ids: list[int] | None = None,
 ) -> int:
+    # category_id is required by the API; tests that don't care about a specific category (or
+    # about category grouping) get one auto-created here, named after the entry so it's unique.
+    if category_id is None:
+        category_id = _make_category(client, f"Auto category for {title!r}")
     response = client.post(
         "/entries",
         json={
@@ -59,13 +63,17 @@ def _build_fixture(client: TestClient) -> dict[str, int]:
     Entries (all times UTC, default ``settings.timezone``):
     - A: cat1, tags [1, 2], 60 min, 2026-07-13T10:00 (week start day)
     - B: cat1, tag [1], 90 min, 2026-07-15T10:00 (mid-week)
-    - C: no category/tags, 45 min, 2026-07-19T20:00 (week end day)
+    - C: cat3, no tags, 45 min, 2026-07-19T20:00 (week end day)
     - D: cat2, no tags, 30 min, 2026-07-25 (in month, not in week)
-    - E: no category/tags, 15 min, 2026-09-01 (in quarter, not in month)
-    - F: no category/tags, 20 min, 2026-10-01 (outside the quarter entirely)
+    - E: cat3, no tags, 15 min, 2026-09-01 (in quarter, not in month)
+    - F: cat3, no tags, 20 min, 2026-10-01 (outside the quarter entirely)
+
+    (category_id is now mandatory on every entry - cat3 stands in for what used to be the
+    "no category assigned" bucket, so the grouping shape of these tests is unchanged.)
     """
     cat1 = _make_category(client, "Deep Work")
     cat2 = _make_category(client, "Meetings")
+    cat3 = _make_category(client, "Other")
     tag1 = _make_tag(client, "focus")
     tag2 = _make_tag(client, "urgent")
 
@@ -85,7 +93,13 @@ def _build_fixture(client: TestClient) -> dict[str, int]:
         category_id=cat1,
         tag_ids=[tag1],
     )
-    entry_c = _make_entry(client, "C", "2026-07-19T20:00:00+00:00", "2026-07-19T20:45:00+00:00")
+    entry_c = _make_entry(
+        client,
+        "C",
+        "2026-07-19T20:00:00+00:00",
+        "2026-07-19T20:45:00+00:00",
+        category_id=cat3,
+    )
     entry_d = _make_entry(
         client,
         "D",
@@ -93,12 +107,17 @@ def _build_fixture(client: TestClient) -> dict[str, int]:
         "2026-07-25T10:30:00+00:00",
         category_id=cat2,
     )
-    entry_e = _make_entry(client, "E", "2026-09-01T10:00:00+00:00", "2026-09-01T10:15:00+00:00")
-    entry_f = _make_entry(client, "F", "2026-10-01T10:00:00+00:00", "2026-10-01T10:20:00+00:00")
+    entry_e = _make_entry(
+        client, "E", "2026-09-01T10:00:00+00:00", "2026-09-01T10:15:00+00:00", category_id=cat3
+    )
+    entry_f = _make_entry(
+        client, "F", "2026-10-01T10:00:00+00:00", "2026-10-01T10:20:00+00:00", category_id=cat3
+    )
 
     return {
         "cat1": cat1,
         "cat2": cat2,
+        "cat3": cat3,
         "tag1": tag1,
         "tag2": tag2,
         "entry_a": entry_a,
@@ -141,7 +160,7 @@ def test_reports_summary_week_aggregates_and_sorts(client: TestClient) -> None:
     by_category = body["by_category"]
     assert [c["category"]["id"] if c["category"] else None for c in by_category] == [
         fixture["cat1"],
-        None,
+        fixture["cat3"],
     ]
     assert [(c["total_minutes"], c["entry_count"]) for c in by_category] == [(150, 2), (45, 1)]
 
@@ -175,10 +194,10 @@ def test_reports_summary_month_aggregates_and_sorts(client: TestClient) -> None:
     assert body["entry_count"] == 4
 
     by_category = body["by_category"]
-    # None (45) sorts ahead of cat2 (30) even though cat1 (150) is still first.
+    # cat3 (45) sorts ahead of cat2 (30) even though cat1 (150) is still first.
     assert [c["category"]["id"] if c["category"] else None for c in by_category] == [
         fixture["cat1"],
-        None,
+        fixture["cat3"],
         fixture["cat2"],
     ]
     assert [(c["total_minutes"], c["entry_count"]) for c in by_category] == [
@@ -212,7 +231,7 @@ def test_reports_summary_quarter_aggregates_and_sorts(client: TestClient) -> Non
     by_category = body["by_category"]
     assert [c["category"]["id"] if c["category"] else None for c in by_category] == [
         fixture["cat1"],
-        None,
+        fixture["cat3"],
         fixture["cat2"],
     ]
     assert [(c["total_minutes"], c["entry_count"]) for c in by_category] == [

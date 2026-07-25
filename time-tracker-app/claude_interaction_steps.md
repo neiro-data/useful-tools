@@ -554,3 +554,81 @@ non-blocking.
 writing the implementation and both test files; verification, the viewport clamp, and the two mousedown
 regression tests were completed from the main thread), `code-reviewer` ×1 (24,430 tokens, no blocking
 issues). Orchestration driven from the main thread. Total sub-agent usage: 63,110 tokens.
+
+---
+
+## Branch `feat/mandatory-category-and-comment` — mandatory category + optional Comment field
+
+Two user requests, resolved after clarifying an ambiguity in the original ask.
+
+**Clarification that shaped the work.** The request said the Comment field "should stay in the categories
+table". That is not expressible: `categories` has one row per category, shared by many entries, so a
+comment stored there would be identical for every entry using that category. Asked the user; they
+confirmed they meant `entries`, and that the existing `notes` column should be reused rather than a new
+column added. They also chose the strictest enforcement for the mandatory category (DB-level `NOT NULL`)
+and explicitly authorized destroying existing entries to get there.
+
+### Mandatory category
+
+`entries.category_id` is now `INTEGER NOT NULL REFERENCES categories (id) ON DELETE RESTRICT`. `ON DELETE
+SET NULL` is no longer legal under `NOT NULL`; `RESTRICT` is safe because the app never hard-deletes
+categories — `app/routers/categories.py` only exposes `/deactivate` (`is_active = 0`), and no
+`DELETE /categories/{id}` route exists.
+
+API: `EntryCreateManual.category_id` and `TimerStartRequest.category_id` became required; `EntryRead.category`
+became non-null. `EntryUpdate.category_id` / `TimerStopRequest.category_id` stay `int | None = None` because
+`model_dump(exclude_unset=True)` uses `None` to mean "field absent" in PATCH semantics — but an *explicitly*
+sent `null` is now rejected with a `ValidationError`, mirroring the existing `start_ts cannot be null` guard.
+Without that check a PATCH could clear a category and surface a raw `IntegrityError` as a 500 instead of a
+clean 4xx.
+
+**Migration** (`app/schema.py`): all DDL uses `CREATE TABLE IF NOT EXISTS`, so an existing database would
+never pick up the new constraint. `_migrate_entries_category_not_null` detects the old shape via the
+`notnull` flag from `PRAGMA table_info(entries)` and performs the standard SQLite 12-step rebuild —
+`entries_new` with the new DDL, copy rows `WHERE category_id IS NOT NULL`, drop, rename, recreate
+`idx_entries_start_ts` + `idx_entries_category_id` (indexes die with the dropped table). `PRAGMA
+foreign_keys` is toggled OFF/ON around it (SQLite only honors that pragma outside a transaction) with
+`isolation_level = None` for explicit transaction control. Rows with a NULL category cannot satisfy the new
+constraint and are deleted along with their `entry_tags` rows. Runs from `init_db` on every startup and is
+a no-op once migrated. Ordering matters: `create_schema` runs first, so on a fresh DB the table is already
+created in the new shape and the migration correctly does nothing.
+
+**Verified against a copy of the real database**, not just fixtures: categorized rows preserved, schema
+`NOT NULL`, both indexes recreated, `PRAGMA foreign_key_check` clean.
+
+Frontend mirrors all of it: `CategoryPicker` gained a `required` prop that hides the "No category" option
+and marks the placeholder; Start/Save are disabled until a category is picked, always paired with an
+explanatory hint so the disabled button is never a dead end; `StartPayload.category` and
+`EntryRowSaveValues.category` tightened to non-null; now-dead `entry.category && …` checks removed.
+`ReportCategoryBreakdown.category` was deliberately LEFT nullable on both sides — that bucket just becomes
+unreachable, and leaving it kept the diff contained.
+
+### Comment field
+
+No schema change. The existing `entries.notes` column already round-trips through create/update/timer-start/
+timer-stop, so it is reused as-is. Only the user-facing copy says "Comment"; the wire and prop names stay
+`notes` to match `app/schemas.py`, with a comment at each site noting the mismatch is deliberate. It is now
+editable in all four places an entry can be created or edited — quick-add, manual entry, running timer, and
+inline entry edit (the last two previously had no notes field at all).
+
+**Bug found and fixed during review of the agent's output:** the running-timer comment input is controlled
+by `runningEntry.notes`, i.e. the value round-tripped from the server on every keystroke. It was calling a
+trimming normalizer per keystroke, so typing a space had it stripped and echoed back immediately — making
+multi-word comments impossible to type. Split into `normalizeNotes` (submit-time, trims) and
+`normalizeNotesLive` (per-keystroke, only collapses truly-empty to `null`), with two regression tests.
+`EntryRow`'s comment input was already correct — it edits local state and trims only on save.
+
+**Tests:** backend 132 passed (was 122); frontend 68 passed (was 60). `ruff check`, `mypy app`, `eslint`,
+`prettier` all clean.
+
+**Non-blocking, accepted as-is:** the migration's discard notice uses `print()` rather than a logger (the
+app has no logger configured); `entry_from_row` raises `RuntimeError` on an unresolvable category, which is
+unreachable under the FK constraint and is caught by the catch-all handler at `app/main.py:72` that returns
+a generic `internal_error` envelope without leaking internals.
+
+**Pre-existing, still not fixed:** the same 2 `tsc` errors in `pages/Reports/ReportsPage.test.tsx`.
+
+**Agents:** `python-pro` ×1 (backend + backend tests, 126,804 tokens), `frontend-developer` ×1 (frontend +
+frontend tests, 98,011 tokens), `code-reviewer` ×1 (44,017 tokens, no blocking issues). Orchestration,
+independent verification, the live-typing bug fix, its regression tests, and the `aria-required` a11y nit
+were done from the main thread. Total sub-agent usage: 268,832 tokens.

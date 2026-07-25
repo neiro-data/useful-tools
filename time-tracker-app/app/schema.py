@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     title TEXT NOT NULL,
     notes TEXT,
-    category_id INTEGER REFERENCES categories (id) ON DELETE SET NULL,
+    category_id INTEGER NOT NULL REFERENCES categories (id) ON DELETE RESTRICT,
     start_ts TEXT NOT NULL,
     end_ts TEXT,
     duration_minutes REAL,
@@ -146,12 +146,123 @@ def _seed_default_settings(conn: sqlite3.Connection) -> None:
     conn.commit()
 
 
+def _entries_category_id_is_not_null(conn: sqlite3.Connection) -> bool:
+    """Whether the current ``entries`` table already has ``category_id NOT NULL``.
+
+    Returns ``True`` for a brand-new DB too (the table is created via ``_CREATE_ENTRIES``, which
+    already has the constraint), which is what makes :func:`_migrate_entries_category_not_null`
+    a no-op in that case.
+    """
+    rows = conn.execute("PRAGMA table_info(entries)").fetchall()
+    for row in rows:
+        # PRAGMA table_info columns: cid, name, type, notnull, dflt_value, pk
+        if row["name"] == "category_id":
+            return bool(row["notnull"])
+    # No entries table at all yet (fresh DB, before create_schema runs) - nothing to migrate.
+    return True
+
+
+def _migrate_entries_category_not_null(conn: sqlite3.Connection) -> None:
+    """Idempotently rebuild ``entries`` so ``category_id`` is ``NOT NULL``.
+
+    Old databases created before this migration have ``category_id INTEGER REFERENCES categories
+    (id) ON DELETE SET NULL`` (nullable). This performs the standard SQLite 12-step table rebuild:
+    create ``entries_new`` with the new (NOT NULL) DDL, copy over every row that already has a
+    category, drop the old table, rename the new one into place, and recreate the indexes that get
+    dropped along with the old table. Rows with ``category_id IS NULL`` cannot satisfy the new
+    constraint and are discarded (along with their ``entry_tags`` rows) - the user has explicitly
+    authorized destroying uncategorized entries here.
+
+    A no-op if ``entries.category_id`` is already ``NOT NULL`` (including on a brand-new DB, where
+    ``create_schema`` already created it that way), and safe to call on every startup.
+    """
+    if _entries_category_id_is_not_null(conn):
+        return
+
+    discarded_row = conn.execute(
+        "SELECT COUNT(*) FROM entries WHERE category_id IS NULL"
+    ).fetchone()
+    discarded = discarded_row[0]
+
+    # Take explicit, manual control of the transaction (rather than relying on the sqlite3
+    # module's implicit-transaction default) so PRAGMA foreign_keys=OFF (which SQLite only
+    # honors outside of a transaction) and the multi-statement rebuild below behave predictably
+    # regardless of what isolation_level this connection happens to have been opened with.
+    previous_isolation_level = conn.isolation_level
+    conn.isolation_level = None
+
+    # The rebuild must run with FK enforcement off (dropping/renaming tables mid-flight would
+    # otherwise trip FK checks), and restored afterwards. Must be set outside any transaction.
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute(
+                """
+                CREATE TABLE entries_new (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    title TEXT NOT NULL,
+                    notes TEXT,
+                    category_id INTEGER NOT NULL REFERENCES categories (id) ON DELETE RESTRICT,
+                    start_ts TEXT NOT NULL,
+                    end_ts TEXT,
+                    duration_minutes REAL,
+                    entry_mode TEXT NOT NULL CHECK (entry_mode IN ('timer', 'manual')),
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            # Drop entry_tags rows belonging to entries that will be discarded, then the entries
+            # themselves are simply never copied over (WHERE category_id IS NOT NULL below).
+            conn.execute(
+                """
+                DELETE FROM entry_tags
+                WHERE entry_id IN (SELECT id FROM entries WHERE category_id IS NULL)
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO entries_new (
+                    id, title, notes, category_id, start_ts, end_ts, duration_minutes,
+                    entry_mode, created_at, updated_at
+                )
+                SELECT
+                    id, title, notes, category_id, start_ts, end_ts, duration_minutes,
+                    entry_mode, created_at, updated_at
+                FROM entries
+                WHERE category_id IS NOT NULL
+                """
+            )
+            conn.execute("DROP TABLE entries")
+            conn.execute("ALTER TABLE entries_new RENAME TO entries")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_entries_start_ts ON entries (start_ts);")
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_entries_category_id ON entries (category_id);"
+            )
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+        else:
+            conn.execute("COMMIT")
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
+        conn.isolation_level = previous_isolation_level
+
+    if discarded:
+        print(  # noqa: T201
+            f"[migration] discarded {discarded} entries with no category "
+            "(category_id is now NOT NULL)"
+        )
+
+
 def init_db(conn: sqlite3.Connection) -> None:
-    """Idempotently bootstrap the database: create schema, then seed defaults.
+    """Idempotently bootstrap the database: create schema, migrate, then seed defaults.
 
     Safe to call on every application startup.
     """
     create_schema(conn)
+    _migrate_entries_category_not_null(conn)
     _seed_default_settings(conn)
 
 

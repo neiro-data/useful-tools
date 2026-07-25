@@ -23,6 +23,8 @@ def _make_entry(
     category_id: int | None = None,
     tag_ids: list[int] | None = None,
 ) -> int:
+    if category_id is None:
+        category_id = _make_category(client, f"Auto category for {title!r}")
     response = client.post(
         "/entries",
         json={

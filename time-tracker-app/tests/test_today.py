@@ -23,11 +23,13 @@ def test_today_is_empty_when_no_data(client: TestClient) -> None:
 
 
 def test_today_includes_todays_entries_and_excludes_running_timer(client: TestClient) -> None:
+    category_id = client.post("/categories", json={"name": "Deep Work"}).json()["id"]
     today = datetime.now(UTC).date().isoformat()
     todays_entry = client.post(
         "/entries",
         json={
             "title": "Today entry",
+            "category_id": category_id,
             "start_ts": f"{today}T08:00:00+00:00",
             "end_ts": f"{today}T09:00:00+00:00",
         },
@@ -36,11 +38,14 @@ def test_today_includes_todays_entries_and_excludes_running_timer(client: TestCl
         "/entries",
         json={
             "title": "Old entry",
+            "category_id": category_id,
             "start_ts": "2020-01-01T08:00:00+00:00",
             "end_ts": "2020-01-01T09:00:00+00:00",
         },
     )
-    running = client.post("/timer/start", json={"title": "Running now"}).json()
+    running = client.post(
+        "/timer/start", json={"title": "Running now", "category_id": category_id}
+    ).json()
 
     response = client.get("/today")
 
@@ -90,10 +95,12 @@ def test_today_day_boundary_resolves_against_configured_timezone(
     freeze_module_now(monkeypatch, "app.routers.today.datetime", frozen_now)
 
     # Entry starts at 23:00 UTC on July 13th.
+    category_id = client.post("/categories", json={"name": "Deep Work"}).json()["id"]
     entry = client.post(
         "/entries",
         json={
             "title": "Late shift",
+            "category_id": category_id,
             "start_ts": "2026-07-13T23:00:00+00:00",
             "end_ts": "2026-07-13T23:30:00+00:00",
         },

@@ -191,7 +191,7 @@ class EntryCreateManual(BaseModel):
 
     title: NonEmptyStr
     notes: Annotated[str, Field(max_length=4000)] | None = None
-    category_id: int | None = None
+    category_id: int
     tag_ids: list[int] = Field(default_factory=list)
     start_ts: AwareDatetime
     end_ts: AwareDatetime
@@ -213,7 +213,9 @@ class EntryUpdate(BaseModel):
     responsibility since this model only sees the fields present in a given PATCH request.
     """
 
-    model_config = ConfigDict(json_schema_extra={"example": {"title": "Write Q3 report (final)"}})
+    model_config = ConfigDict(
+        json_schema_extra={"example": {"title": "Write Q3 report (final)", "category_id": 1}}
+    )
 
     title: NonEmptyStr | None = None
     notes: Annotated[str, Field(max_length=4000)] | None = None
@@ -259,7 +261,7 @@ class EntryRead(BaseModel):
     id: int
     title: str
     notes: str | None
-    category: CategoryRead | None
+    category: CategoryRead
     tags: list[TagRead]
     start_ts: datetime
     end_ts: datetime | None
@@ -284,9 +286,9 @@ class EntryListResponse(BaseModel):
 class TimerStartRequest(BaseModel):
     """Request body for ``POST /timer/start``.
 
-    All fields are optional and may be filled in/edited later via ``POST /timer/stop`` or
-    ``PATCH /entries/{entry_id}``. If ``title`` is omitted the backend assigns a placeholder
-    (e.g. ``"Untitled"``).
+    ``category_id`` is required. Other fields are optional and may be filled in/edited later via
+    ``POST /timer/stop`` or ``PATCH /entries/{entry_id}``. If ``title`` is omitted the backend
+    assigns a placeholder (e.g. ``"Untitled"``).
     """
 
     model_config = ConfigDict(
@@ -295,7 +297,7 @@ class TimerStartRequest(BaseModel):
 
     title: NonEmptyStr | None = None
     notes: Annotated[str, Field(max_length=4000)] | None = None
-    category_id: int | None = None
+    category_id: int
     tag_ids: list[int] = Field(default_factory=list)
 
 
