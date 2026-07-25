@@ -743,3 +743,25 @@ clean. Import ordering in `app/main.py` needed a `ruff --fix` since `app.db_sche
 
 **Agents:** none. Mechanical rename driven entirely from the main thread — delegating it would have cost
 more than doing it.
+
+## Branch `docs/database-er-diagram` — schema diagram in the README
+
+Docs only, no code touched. Added a **Database** section to `README.md` between *Project layout* and
+*Requirements*.
+
+**Format choice.** The user asked for a diagram "or suggest another format". Went with a Mermaid
+`erDiagram` fenced block inline in the README rather than a checked-in PNG/SVG or an external tool
+(dbdiagram.io, DBeaver export): GitHub renders Mermaid natively, so there is nothing to regenerate,
+nothing binary in the repo, and a schema change shows up as a readable text diff in review. The
+trade-off — that it can drift from `app/db_schema.py` — is called out in the section itself, which
+names the DDL as canonical.
+
+Contents: all six tables with column types, nullability, `CHECK`/`UNIQUE` constraints and FK delete
+behaviour; the three relationships (`categories → entries`, and `entries`/`tags` through the
+`entry_tags` join table); a note that `report_exports` and `settings` stand alone and that `settings`
+holds exactly one row. Followed by the storage conventions a query-writer needs (ISO-8601 UTC TEXT
+timestamps, 0/1 integer booleans, `CHECK`-as-enum, and the per-connection `PRAGMA foreign_keys = ON`
+that ad-hoc `sqlite3` sessions do *not* inherit), plus a table of the three explicit indexes and what
+each serves.
+
+**Agents:** none. Single-file documentation change read straight off `app/db_schema.py`.
