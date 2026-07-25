@@ -47,3 +47,6 @@ exclude = ["tests/"]
 minversion = "9.0"
 addopts = "-ra"
 testpaths = ["tests"]
+markers = [
+    "slow: exercises a real uvicorn subprocess; deselect with -m 'not slow' for fast local runs",
+]
