@@ -25,7 +25,8 @@ uv run python -m app.seed --dry-run   # preview, writes nothing
 uv run python -m app.seed             # apply
 ```
 
-The file ships with four starter categories (Deep work, Meetings, Admin, Learning). Three or four broad buckets is a better starting point than a fine-grained taxonomy — you can always split later.
+You can confirm that the categories were created by querying the `categories` tables.
+
 
 **How re-running behaves.** `name` is the match key. Categories in the file but not yet in the database are inserted; ones already there have their `color` and `sort_order` updated to match the file. Nothing is ever deleted, so a category with entries attached can't be orphaned, and a category you created in the UI survives a seed run that doesn't mention it.
 
