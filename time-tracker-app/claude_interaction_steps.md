@@ -506,3 +506,51 @@ read from the snapshot for negligible gain on a single-user local app, so it was
 
 **Agents:** `python-pro` ×1 (implement), `test-automator` ×1, `code-reviewer` ×1. Orchestration was driven
 from the main thread (no `architect-orchestrator` sub-agent), so there is no separate token figure for it.
+
+---
+
+## Branch `fix/category-colors-and-picker-clipping` — category colours + clipped category dropdown
+
+Two user-reported frontend bugs, both root-caused before any code was written.
+
+**Bug 1 — every category rendered slate grey.** `frontend/src/utils/categoryColor.ts` resolved a
+category's stored `color` against a fixed set of 12 named palette keys (`blue`, `teal`, …) and fell back
+to `slate` for anything else. But real categories store raw hex: `seed/categories.toml` ships `#e3db38`,
+`#F59F00`, `#384ad2`, `#f31717`, `#12B886`, and `app/schemas.py` documents `color` as a free-form token
+("hex code or CSS name"). So the fallback swallowed every seeded category. `categoryColorVar()` now
+handles three cases: named key → theme-aware `var(--cat-*)` (unchanged), anchored-regex-validated hex
+(`#RGB`/`#RGBA`/`#RRGGBB`/`#RRGGBBAA`) → passthrough, anything else/null → `slate`. The regex is a real
+guard, not cosmetic: the value flows into an inline `style` and is interpolated into the `color-mix()`
+expression in `categoryChipTint()`, which an unvalidated string would break.
+
+**Bug 2 — could not scroll/reach categories when editing a saved entry.** `CategoryPicker`'s options list
+was `position: absolute` inside the picker root. It already had `max-height: 240px; overflow-y: auto`, so
+the popover was not the problem — an ancestor was: `.list` sets `overflow: hidden` in BOTH
+`pages/Today/TodayPage.module.css` and `components/DayGroup/DayGroup.module.css` (there to clip the
+bordered list's rounded corners). Inline-editing a row put the popover inside that clip. Fixed by
+portalling the list to `document.body` via `createPortal` with `position: fixed`, positioned from the
+trigger's `getBoundingClientRect()`, flipping above the trigger when there is no room below, clamped
+horizontally into the viewport, and repositioned on `resize` + capture-phase `scroll`. Rounded corners are
+untouched.
+
+**The subtle part:** portalling moves the popover OUT of `rootRef`, so the existing outside-click handler
+(`rootRef.contains(target)`) would have closed the popover on its own mousedown, making every option
+unclickable. The handler now also checks `popoverRef`. Two regression tests pin this down specifically —
+note `fireEvent.click` does not fire `mousedown`, so the naive click test passes even with the bug; the
+guards fire `mouseDown` explicitly (inside → stays open, outside → closes).
+
+**Tests:** `utils/categoryColor.test.ts` (new) and `components/CategoryPicker/CategoryPicker.test.tsx`
+(new). `npm run lint` clean, `prettier --check` clean, `npm test` 60/60 pass.
+
+**Pre-existing, left alone:** `npx tsc -b --noEmit` reports 2 errors in `pages/Reports/ReportsPage.test.tsx`
+(missing `entry_count` in `ReportDayBreakdown` fixtures). Confirmed present on `main` by stashing — out of
+scope for this branch.
+
+**Not done (accepted):** the picker still has no focus management (focus does not move into the listbox on
+open or return to the trigger on close). That gap predates this change; code review flagged it as
+non-blocking.
+
+**Agents:** `frontend-developer` ×1 (implement, 38,680 tokens — terminated early by an API 529 after
+writing the implementation and both test files; verification, the viewport clamp, and the two mousedown
+regression tests were completed from the main thread), `code-reviewer` ×1 (24,430 tokens, no blocking
+issues). Orchestration driven from the main thread. Total sub-agent usage: 63,110 tokens.
