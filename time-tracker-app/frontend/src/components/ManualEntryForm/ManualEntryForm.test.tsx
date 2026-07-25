@@ -49,4 +49,62 @@ describe("ManualEntryForm", () => {
 
     expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ category_id: 1, notes: "Draft only" }));
   });
+
+  it("builds the ISO start/end timestamps from the date/hour/minute pickers", () => {
+    const onSubmit = vi.fn();
+    render(
+      <ManualEntryForm
+        categories={[deepWork]}
+        knownTags={[]}
+        defaultStart="2026-07-13T09:00"
+        defaultEnd="2026-07-13T10:00"
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Manual entry title"), { target: { value: "Write docs" } });
+    fireEvent.click(screen.getByLabelText("Category *"));
+    fireEvent.click(screen.getByText("Deep Work"));
+
+    fireEvent.change(screen.getByLabelText("Start date"), { target: { value: "2026-07-13" } });
+    fireEvent.change(screen.getByLabelText("Start hour"), { target: { value: "08" } });
+    fireEvent.change(screen.getByLabelText("Start minute"), { target: { value: "15" } });
+    fireEvent.change(screen.getByLabelText("End hour"), { target: { value: "09" } });
+    fireEvent.change(screen.getByLabelText("End minute"), { target: { value: "45" } });
+
+    fireEvent.click(screen.getByText("Save"));
+
+    expect(onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        start_ts: new Date("2026-07-13T08:15").toISOString(),
+        end_ts: new Date("2026-07-13T09:45").toISOString(),
+      }),
+    );
+  });
+
+  it("rejects submit when the end time is before the start time", () => {
+    const onSubmit = vi.fn();
+    render(
+      <ManualEntryForm
+        categories={[deepWork]}
+        knownTags={[]}
+        defaultStart="2026-07-13T09:00"
+        defaultEnd="2026-07-13T10:00"
+        onSubmit={onSubmit}
+        onCancel={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Manual entry title"), { target: { value: "Write docs" } });
+    fireEvent.click(screen.getByLabelText("Category *"));
+    fireEvent.click(screen.getByText("Deep Work"));
+
+    fireEvent.change(screen.getByLabelText("End hour"), { target: { value: "08" } });
+
+    fireEvent.click(screen.getByText("Save"));
+
+    expect(screen.getByRole("alert")).toHaveTextContent("End must be after start.");
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
 });

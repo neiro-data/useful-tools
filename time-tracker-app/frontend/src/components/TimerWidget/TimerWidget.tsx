@@ -3,6 +3,7 @@ import type { CategoryRead, EntryRead, TagRead } from "../../api/types";
 import { CategoryPicker } from "../CategoryPicker/CategoryPicker";
 import { TagEditor } from "../TagChip/TagEditor";
 import { RecentChipsRail } from "../RecentChipsRail/RecentChipsRail";
+import { DateTimePicker } from "../DateTimePicker/DateTimePicker";
 import { useLiveTimer } from "../../hooks/useLiveTimer";
 import { formatElapsedSeconds } from "../../utils/duration";
 import styles from "./TimerWidget.module.css";
@@ -73,8 +74,16 @@ export function TimerWidget({
 
   function handleKeyDown(event: KeyboardEvent<HTMLDivElement>): void {
     const target = event.target as HTMLElement;
-    const isTextField = target.tagName === "INPUT" || target.tagName === "TEXTAREA";
-    if (isTextField && !(event.key >= "1" && event.key <= "6")) return;
+    // Recent-category (1-6) and recent-tag (Shift+1-6) shortcuts must only fire when focus is
+    // NOT inside a field — otherwise typing a digit into the quick-add title, comment, or the
+    // manual date/time pickers gets hijacked instead of entering that character. Bail out for
+    // every key (not just digits) whenever the event originates from an editable control.
+    const isFieldTarget =
+      target.tagName === "INPUT" ||
+      target.tagName === "TEXTAREA" ||
+      target.tagName === "SELECT" ||
+      target.isContentEditable;
+    if (isFieldTarget) return;
 
     if (!event.shiftKey && event.key >= "1" && event.key <= "6") {
       const index = Number(event.key) - 1;
@@ -244,22 +253,8 @@ export function TimerWidget({
 
       {manualMode && (
         <div className={styles.manualTimes}>
-          <label>
-            Start
-            <input
-              type="datetime-local"
-              value={manualStart}
-              onChange={(event) => setManualStart(event.target.value)}
-            />
-          </label>
-          <label>
-            End
-            <input
-              type="datetime-local"
-              value={manualEnd}
-              onChange={(event) => setManualEnd(event.target.value)}
-            />
-          </label>
+          <DateTimePicker value={manualStart} onChange={setManualStart} label="Start" />
+          <DateTimePicker value={manualEnd} onChange={setManualEnd} label="End" />
           <button type="button" className={styles.manualLink} onClick={() => setManualMode(false)}>
             Cancel
           </button>

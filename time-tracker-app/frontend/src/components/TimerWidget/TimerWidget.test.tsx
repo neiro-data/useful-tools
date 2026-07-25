@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { TimerWidget } from "./TimerWidget";
-import type { CategoryRead, EntryRead } from "../../api/types";
+import type { CategoryRead, EntryRead, TagRead } from "../../api/types";
 
 const noop = vi.fn();
 
@@ -106,6 +106,156 @@ describe("TimerWidget", () => {
     fireEvent.click(screen.getByText("Start ▶"));
 
     expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ notes: "Follow up with team" }));
+  });
+
+  it("picks a recent category via the 1-6 shortcut when focus is outside a field", () => {
+    const onStart = vi.fn();
+    const { container } = render(
+      <TimerWidget
+        runningEntry={null}
+        categories={[deepWork]}
+        knownTags={[]}
+        recentCategories={[deepWork]}
+        recentTags={[]}
+        onStart={onStart}
+        onStop={noop}
+        onUpdateRunning={noop}
+        onManualAdd={noop}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("What are you working on?"), {
+      target: { value: "Deep focus block" },
+    });
+    // Move focus off the title input before dispatching the shortcut, so it lands on the card
+    // root rather than a field.
+    const root = container.querySelector('[data-mode="idle"]') as HTMLElement;
+    root.focus();
+    fireEvent.keyDown(root, { key: "1" });
+
+    fireEvent.click(screen.getByText("Start ▶"));
+
+    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ category: deepWork }));
+  });
+
+  it("allows typing '1' into the quick-add title input instead of triggering the shortcut", () => {
+    const onStart = vi.fn();
+    render(
+      <TimerWidget
+        runningEntry={null}
+        categories={[deepWork]}
+        knownTags={[]}
+        recentCategories={[deepWork]}
+        recentTags={[]}
+        onStart={onStart}
+        onStop={noop}
+        onUpdateRunning={noop}
+        onManualAdd={noop}
+      />,
+    );
+
+    const input = screen.getByPlaceholderText("What are you working on?");
+    fireEvent.keyDown(input, { key: "1" });
+    fireEvent.change(input, { target: { value: "1" } });
+
+    // The shortcut must not have fired: no category got auto-selected, so Start stays disabled.
+    expect(input).toHaveValue("1");
+    expect(screen.getByText("Start ▶")).toBeDisabled();
+  });
+
+  it("picks a recent tag via the Shift+1-6 shortcut when focus is outside a field", () => {
+    const onStart = vi.fn();
+    const bug: TagRead = { id: 1, name: "bug", is_active: true };
+    const { container } = render(
+      <TimerWidget
+        runningEntry={null}
+        categories={[deepWork]}
+        knownTags={[bug]}
+        recentCategories={[deepWork]}
+        recentTags={[bug]}
+        onStart={onStart}
+        onStop={noop}
+        onUpdateRunning={noop}
+        onManualAdd={noop}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("What are you working on?"), {
+      target: { value: "Deep focus block" },
+    });
+    fireEvent.click(screen.getByText("Deep Work"));
+
+    const root = container.querySelector('[data-mode="idle"]') as HTMLElement;
+    root.focus();
+    fireEvent.keyDown(root, { key: "1", shiftKey: true });
+
+    fireEvent.click(screen.getByText("Start ▶"));
+
+    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ tagNames: ["bug"] }));
+  });
+
+  it("allows typing '1' into the manual-mode date/time fields instead of triggering shortcuts", () => {
+    const onStart = vi.fn();
+    render(
+      <TimerWidget
+        runningEntry={null}
+        categories={[deepWork]}
+        knownTags={[]}
+        recentCategories={[deepWork]}
+        recentTags={[]}
+        onStart={onStart}
+        onStop={noop}
+        onUpdateRunning={noop}
+        onManualAdd={noop}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("+ Manual entry"));
+
+    const hourSelect = screen.getByLabelText("Start hour");
+    fireEvent.keyDown(hourSelect, { key: "1" });
+
+    // The shortcut must not have fired: no category got auto-selected from the recent chip.
+    expect(screen.getByText("Save")).toBeDisabled();
+  });
+
+  it("submits the correct ISO start/end timestamps built from the manual date/hour/minute pickers", () => {
+    const onManualAdd = vi.fn();
+    render(
+      <TimerWidget
+        runningEntry={null}
+        categories={[deepWork]}
+        knownTags={[]}
+        recentCategories={[deepWork]}
+        recentTags={[]}
+        onStart={noop}
+        onStop={noop}
+        onUpdateRunning={noop}
+        onManualAdd={onManualAdd}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("What are you working on?"), {
+      target: { value: "Deep focus block" },
+    });
+    fireEvent.click(screen.getByText("Deep Work"));
+    fireEvent.click(screen.getByText("+ Manual entry"));
+
+    fireEvent.change(screen.getByLabelText("Start date"), { target: { value: "2026-07-13" } });
+    fireEvent.change(screen.getByLabelText("Start hour"), { target: { value: "09" } });
+    fireEvent.change(screen.getByLabelText("Start minute"), { target: { value: "30" } });
+    fireEvent.change(screen.getByLabelText("End date"), { target: { value: "2026-07-13" } });
+    fireEvent.change(screen.getByLabelText("End hour"), { target: { value: "10" } });
+    fireEvent.change(screen.getByLabelText("End minute"), { target: { value: "00" } });
+
+    fireEvent.click(screen.getByText("Save"));
+
+    expect(onManualAdd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        startTs: new Date("2026-07-13T09:30").toISOString(),
+        endTs: new Date("2026-07-13T10:00").toISOString(),
+      }),
+    );
   });
 
   it("renders the running state with live timer and Stop button", () => {

@@ -2,6 +2,7 @@ import { useState, type ReactElement } from "react";
 import type { CategoryRead, EntryCreateManual, TagRead } from "../../api/types";
 import { CategoryPicker } from "../CategoryPicker/CategoryPicker";
 import { TagEditor } from "../TagChip/TagEditor";
+import { DateTimePicker } from "../DateTimePicker/DateTimePicker";
 import styles from "./ManualEntryForm.module.css";
 
 export interface ManualEntryFormValues extends Omit<EntryCreateManual, "tag_ids"> {
@@ -11,7 +12,7 @@ export interface ManualEntryFormValues extends Omit<EntryCreateManual, "tag_ids"
 interface ManualEntryFormProps {
   categories: CategoryRead[];
   knownTags: TagRead[];
-  /** `YYYY-MM-DDTHH:mm` defaults for the local `datetime-local` inputs. */
+  /** `YYYY-MM-DDTHH:mm` defaults for the `DateTimePicker` start/end controls. */
   defaultStart: string;
   defaultEnd: string;
   onSubmit: (entry: ManualEntryFormValues) => Promise<void> | void;
@@ -92,14 +93,8 @@ export function ManualEntryForm({
         <TagEditor value={tagNames} onChange={setTagNames} knownTags={knownTags} />
       </div>
       <div className={styles.timesRow}>
-        <label>
-          Start
-          <input type="datetime-local" value={start} onChange={(event) => setStart(event.target.value)} />
-        </label>
-        <label>
-          End
-          <input type="datetime-local" value={end} onChange={(event) => setEnd(event.target.value)} />
-        </label>
+        <DateTimePicker value={start} onChange={setStart} label="Start" />
+        <DateTimePicker value={end} onChange={setEnd} label="End" />
       </div>
       {error && (
         <p className={styles.error} role="alert">

@@ -99,8 +99,46 @@ describe("SettingsPage", () => {
     expect(screen.getByLabelText("Default entry mode")).toHaveValue("timer");
     expect(screen.getByLabelText("Week starts on")).toHaveValue("monday");
     expect(screen.getByLabelText("Default export format")).toHaveValue("html");
-    expect(screen.getByLabelText("Database label")).toHaveValue("My Database");
     expect(screen.getByLabelText("Timezone")).toHaveValue("Europe/Lisbon");
+  });
+
+  it("does not render a Database label control anywhere on the page", () => {
+    mockSettingsHook();
+    mockTimezonesHook();
+    mockCategoriesHook();
+
+    render(<SettingsPage />);
+
+    expect(screen.queryByLabelText(/database label/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/database label/i)).not.toBeInTheDocument();
+  });
+
+  it("does not render a Sort order input anywhere on the page", () => {
+    mockSettingsHook();
+    mockTimezonesHook();
+    mockCategoriesHook();
+
+    render(<SettingsPage />);
+
+    expect(screen.queryByLabelText(/sort order/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/sort order/i)).not.toBeInTheDocument();
+  });
+
+  it("saves other settings without a database_label field even though it isn't editable", async () => {
+    const save = vi.fn().mockResolvedValue(undefined);
+    mockSettingsHook({ save });
+    mockTimezonesHook();
+    mockCategoriesHook();
+
+    render(<SettingsPage />);
+
+    fireEvent.change(screen.getByLabelText("Week starts on"), { target: { value: "sunday" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Settings saved."));
+
+    expect(save).toHaveBeenCalledWith({ week_starts_on: "sunday" });
+    expect(save).not.toHaveBeenCalledWith(expect.objectContaining({ database_label: expect.anything() }));
   });
 
   it("shows skeleton placeholders while loading", () => {
@@ -110,7 +148,7 @@ describe("SettingsPage", () => {
 
     const { container } = render(<SettingsPage />);
 
-    expect(screen.queryByLabelText("Database label")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Timezone")).not.toBeInTheDocument();
     expect(container.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(0);
   });
 
@@ -132,14 +170,14 @@ describe("SettingsPage", () => {
 
     render(<SettingsPage />);
 
-    fireEvent.change(screen.getByLabelText("Database label"), {
-      target: { value: "Renamed Database" },
+    fireEvent.change(screen.getByLabelText("Timezone"), {
+      target: { value: "Europe/Madrid" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Settings saved."));
 
-    expect(save).toHaveBeenCalledWith({ database_label: "Renamed Database" });
+    expect(save).toHaveBeenCalledWith({ timezone: "Europe/Madrid" });
   });
 
   it("shows the error banner when the save fails", async () => {
@@ -150,24 +188,12 @@ describe("SettingsPage", () => {
 
     render(<SettingsPage />);
 
-    fireEvent.change(screen.getByLabelText("Database label"), {
-      target: { value: "Renamed Database" },
+    fireEvent.change(screen.getByLabelText("Timezone"), {
+      target: { value: "Europe/Madrid" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Invalid timezone."));
-  });
-
-  it("disables the Save button when the database label is blank", () => {
-    mockSettingsHook();
-    mockTimezonesHook();
-    mockCategoriesHook();
-
-    render(<SettingsPage />);
-
-    fireEvent.change(screen.getByLabelText("Database label"), { target: { value: "   " } });
-
-    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
   });
 
   it("renders timezone options with their UTC offsets and preselects the saved zone", () => {
@@ -239,10 +265,26 @@ describe("SettingsPage", () => {
     expect(createCategory).toHaveBeenCalledWith({
       name: "Errands",
       color: "blue",
-      sort_order: 0,
+      sort_order: 10,
     });
     expect(reload).toHaveBeenCalled();
     await waitFor(() => expect(screen.getByLabelText("Category name")).toHaveValue(""));
+  });
+
+  it("computes sort_order 0 for the first category when the list is empty", async () => {
+    vi.mocked(createCategory).mockResolvedValue(makeCategory({ id: 1, name: "First" }));
+    mockSettingsHook();
+    mockTimezonesHook();
+    mockCategoriesHook({ categories: [] });
+
+    render(<SettingsPage />);
+
+    fireEvent.change(screen.getByLabelText("Category name"), { target: { value: "First" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add category" }));
+
+    await waitFor(() =>
+      expect(createCategory).toHaveBeenCalledWith({ name: "First", color: "blue", sort_order: 0 }),
+    );
   });
 
   it("shows a duplicate-name message on a 409 conflict", async () => {

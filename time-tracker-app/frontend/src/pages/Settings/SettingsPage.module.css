@@ -32,6 +32,20 @@
   font-size: var(--text-sm);
 }
 
+.layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 .formCard {
   display: flex;
   flex-direction: column;
