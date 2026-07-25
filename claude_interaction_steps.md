@@ -15,3 +15,10 @@
 - Tests: frontend/src/api/settings.test.ts, frontend/src/hooks/useSettings.test.ts, frontend/src/pages/Settings/SettingsPage.test.tsx (13 new tests).
 - Pipeline: architect-orchestrator (plan/git) -> frontend-developer (impl) -> test-automator (Vitest) -> code-reviewer (no blocking issues).
 - Gates: npm run lint, tsc --noEmit, vitest run (46 tests) — all green.
+
+### sqlite-command-guide — SQLite reference doc + personal seed categories
+- What: Docs/config only. No application code touched, so no test or lint gates apply.
+- Added: time-tracker-app/sqlite-command-guide.md — a 16-section `sqlite3` CLI and SQL reference (dot-commands, inspection, output modes, import/export, DDL with type-affinity/foreign-key caveats, DML incl. upsert and RETURNING, CTEs and window functions, date-time arithmetic, JSON, transactions, EXPLAIN QUERY PLAN and pragmas, backup/integrity, FTS5, ATTACH, Python sqlite3). Examples use the app's own categories/entries shape.
+- Changed: time-tracker-app/seed/categories.toml — replaced the generic starter set (Deep work / Meetings / Admin / Learning) with the user's own five categories (Meetings - Org, Meetings - Technical, Organizational, Technical, Learning) and renumbered sort_order in gaps of 10.
+- Branch: cut from main after PR #10 (the seed feature) merged; the in-flight categories.toml edit was carried across via git stash.
+- Pipeline: none — direct edits, no sub-agents spawned.
