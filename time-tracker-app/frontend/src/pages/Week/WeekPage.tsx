@@ -8,6 +8,7 @@ import { useRunningTimer } from "../../hooks/useRunningTimer";
 import { DayGroup } from "../../components/DayGroup/DayGroup";
 import { SegmentedBreakdown } from "../../components/SegmentedBreakdown/SegmentedBreakdown";
 import { MiniBarChart } from "../../components/MiniBarChart/MiniBarChart";
+import { barsFromDays } from "../../components/MiniBarChart/bars";
 import { TimerBanner } from "../../components/TimerBanner/TimerBanner";
 import { Skeleton } from "../../components/Skeleton/Skeleton";
 import { getWeekRange, enumerateDays, formatWeekHeading, isToday } from "../../utils/dateRange";
@@ -53,7 +54,9 @@ export function WeekPage(): ReactElement {
   const total = totalMinutes(entries);
   const categoryBreakdown = useMemo(() => breakdownByCategory(entries), [entries]);
   const tagBreakdown = useMemo(() => breakdownByTag(entries), [entries]);
-  const chartDays = days.map((isoDate) => ({ isoDate, minutes: totalMinutes(grouped.get(isoDate) ?? []) }));
+  const chartBars = barsFromDays(
+    days.map((isoDate) => ({ isoDate, minutes: totalMinutes(grouped.get(isoDate) ?? []) })),
+  );
 
   async function handleSaveEntry(entryId: number, values: EntryRowSaveValues): Promise<void> {
     await updateEntry(entryId, { title: values.title, category_id: values.category.id, notes: values.notes });
@@ -105,7 +108,7 @@ export function WeekPage(): ReactElement {
               <p className={styles.totalValue}>
                 {total === 0 ? "0m — nothing logged yet this week" : formatDurationMinutes(total)}
               </p>
-              <MiniBarChart days={chartDays} />
+              <MiniBarChart bars={chartBars} />
             </div>
             <div className={styles.breakdownCard}>
               <SegmentedBreakdown title="By category" segments={categoryBreakdown} variant="category" />

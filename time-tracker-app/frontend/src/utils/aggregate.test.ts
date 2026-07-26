@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { breakdownByCategory, breakdownByTag, totalMinutes } from "./aggregate";
+import { breakdownByCategory, breakdownByTag, groupByWeek, totalMinutes } from "./aggregate";
 import type { CategoryRead, EntryRead, TagRead } from "../api/types";
 
 /**
@@ -77,6 +77,54 @@ describe("breakdownByCategory", () => {
 
   it("returns an empty list for no entries", () => {
     expect(breakdownByCategory([])).toEqual([]);
+  });
+});
+
+describe("groupByWeek", () => {
+  // 2026-07-01 is a Wednesday, so the month's Monday-start weeks are clipped at both ends:
+  // 06-29..07-05 (clipped to 07-01..07-05) ... 07-27..08-02 (clipped to 07-27..07-31).
+  const rangeStart = "2026-07-01";
+  const rangeEnd = "2026-07-31";
+
+  it("clips the first and last week buckets to the range bounds", () => {
+    const entries = [
+      makeEntry({ id: 1, start_ts: "2026-07-01T09:00:00+00:00", duration_minutes: 30 }),
+      makeEntry({ id: 2, start_ts: "2026-07-31T09:00:00+00:00", duration_minutes: 45 }),
+    ];
+
+    const buckets = groupByWeek(entries, rangeStart, rangeEnd);
+
+    expect(buckets[0]).toMatchObject({ weekStart: "2026-07-01", weekEnd: "2026-07-05", minutes: 30 });
+    expect(buckets[buckets.length - 1]).toMatchObject({
+      weekStart: "2026-07-27",
+      weekEnd: "2026-07-31",
+      minutes: 45,
+    });
+  });
+
+  it("includes an empty week bucket (0 minutes) for a week inside the range with no entries", () => {
+    const entries = [makeEntry({ id: 1, start_ts: "2026-07-01T09:00:00+00:00", duration_minutes: 30 })];
+
+    const buckets = groupByWeek(entries, rangeStart, rangeEnd);
+    const thirdWeek = buckets.find((bucket) => bucket.weekStart === "2026-07-13");
+
+    expect(thirdWeek).toMatchObject({ weekStart: "2026-07-13", weekEnd: "2026-07-19", minutes: 0 });
+  });
+
+  it("sums bucket totals to the same total as the ungrouped entries", () => {
+    const entries = [
+      makeEntry({ id: 1, start_ts: "2026-07-01T09:00:00+00:00", duration_minutes: 30 }),
+      makeEntry({ id: 2, start_ts: "2026-07-08T09:00:00+00:00", duration_minutes: 60 }),
+      makeEntry({ id: 3, start_ts: "2026-07-20T09:00:00+00:00", duration_minutes: 15 }),
+      makeEntry({ id: 4, start_ts: "2026-07-31T09:00:00+00:00", duration_minutes: 45 }),
+      makeEntry({ id: 5, start_ts: "2026-07-31T15:00:00+00:00", duration_minutes: null }),
+    ];
+
+    const buckets = groupByWeek(entries, rangeStart, rangeEnd);
+
+    const bucketTotal = buckets.reduce((sum, bucket) => sum + bucket.minutes, 0);
+    expect(bucketTotal).toBe(totalMinutes(entries));
+    expect(bucketTotal).toBe(150);
   });
 });
 

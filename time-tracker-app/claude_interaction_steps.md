@@ -808,3 +808,42 @@ that ad-hoc `sqlite3` sessions do *not* inherit), plus a table of the three expl
 each serves.
 
 **Agents:** none. Single-file documentation change read straight off `app/db_schema.py`.
+## Branch `feat/report-types-and-charts` — report formats, weekly charts, export graphics
+
+- What: five user-requested improvements. (1) New `GET /exports/report.md` + `GET /exports/report.pdf`
+  (fpdf2, pure-Python — weasyprint rejected: needs cairo/pango); Reports tab now offers
+  HTML/Markdown/PDF/CSV and finally honors `settings.default_export_format`, which was stored but
+  read nowhere. (2) New `by_week` field on `ReportSummaryResponse` — quarter charts by week (~13 bars)
+  instead of ~90 day bars. (3) Reports date input relabeled as a period *anchor* + hint + ‹ › paging
+  + Today reset (it expands to the containing period; the old "Date" label read like a filter).
+  (4) Month view gained a week-bucketed MiniBarChart via new client-side `groupByWeek`.
+  (5) Bar-chart graphics in all three export formats; HTML stays Outlook-safe (nested tables, inline
+  styles, no `<style>`/SVG/JS).
+- Contract pinned up front so the parallel backend/frontend agents couldn't diverge:
+  `by_week = {week_start, week_end, total_minutes, entry_count}`, zero-filled, clipped to period
+  bounds so it sums to `total_minutes`. Deliberately NO iso-week field — ISO weeks are Monday-based
+  and would mislead for a Sunday week start.
+- Behavior change: `week_starts_on` is now honored in `/reports/summary` (previously dead config), so
+  a Sunday-start user's week bounds shift. Not backward-compatible; called out in the PR.
+- Orchestrator-caught defect (before review): the frontend agent paged the anchor by fixed
+  millisecond offsets. Wrong three ways — month back from Mar 31 landed on Mar 1 (same month, button
+  did nothing), forward from Jan 31 skipped February, and raw-ms arithmetic across a DST transition
+  lands at 23:00 the prior local day so `toIsoDate` reads a date one off. Rewrote as calendar
+  arithmetic (`stepAnchor`); the five regressions are now pinned by tests.
+- Review-caught defect: fpdf2's core Helvetica is Latin-1 only, so a category named `☕ Coffee` made
+  `report.pdf` throw an unhandled 500 while HTML/MD rendered it fine. Reproduced directly, fixed with
+  a lossy `_pdf_safe()` sanitizer applied to every PDF text write (audited all 10 call sites) rather
+  than shipping a ~700KB Unicode TTF. Also: corrected `get_settings_week_start`'s docstring, which
+  claimed a DB `CHECK` on `week_starts_on` that does not exist; DRY'd the triplicated row-building
+  across the three renderers (HTML escaping now happens at point of use); PDF label truncation now
+  shows `...`.
+- Pipeline: architect-orchestrator (plan, contract, anchor fix, git) -> python-pro + react-specialist
+  in parallel (implementation) -> 2x test-automator in parallel (backend/frontend tests) ->
+  code-reviewer -> python-pro (review fixes). All specialists on Sonnet.
+- Gates (re-verified by orchestrator, not taken on report): backend 172 pytest / ruff format+check /
+  mypy strict clean; frontend eslint clean / 123 vitest / `npm run build` green. Test counts:
+  backend 151->172, frontend 96->123.
+- Known/out-of-scope: `frontend/src/utils/dateRange.ts::getWeekRange` still hardcodes Monday, so the
+  Week page ignores `week_starts_on`. With `week_starts_on: "sunday"` the Month page chart
+  (client-side Monday) and the Reports month chart (backend, honors setting) now bucket the same data
+  differently — visible inconsistency, flagged to the user for a follow-up branch.

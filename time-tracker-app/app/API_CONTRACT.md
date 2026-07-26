@@ -366,7 +366,8 @@ Query params:
 Period resolution (local, tz-aware, using the same `settings.timezone`-based boundary helper as
 `/today` and `/entries`):
 
-- `week` — ISO week (Monday–Sunday) containing `date`.
+- `week` — the 7-day week containing `date`, starting on `settings.week_starts_on`
+  (`"monday"` or `"sunday"`).
 - `month` — calendar month containing `date`.
 - `quarter` — calendar quarter (Jan–Mar, Apr–Jun, Jul–Sep, Oct–Dec) containing `date`.
 
@@ -392,6 +393,14 @@ nearest whole minute) — never trusted from the client.
     entry** within the period, ascending by date. Days with zero entries are omitted entirely
     (not zero-filled) — the frontend is responsible for filling gaps if it needs a dense
     day-by-day series (e.g. for a calendar heatmap).
+  - `by_week: ReportWeekBreakdown[]` — one row per **local week overlapping the period**,
+    ascending by `week_start`, **zero-filled** (weeks with no entries still appear) — the
+    opposite of `by_day`'s sparse behavior. Week boundaries follow `settings.week_starts_on`
+    (`"monday" | "sunday"`). `week_start`/`week_end` are clipped to the period's
+    `start_date`/`end_date`, so a week only partially inside the period shows only the
+    overlapping days; this guarantees `sum(w.total_minutes for w in by_week) == total_minutes`
+    exactly. There is deliberately **no** ISO-week-number field, since ISO week numbering is
+    always Monday-based and would be misleading for a Sunday-start week.
 - `422 validation_error` → unrecognized `period` value, malformed `date`.
 
 ### `GET /reports/narrative`
@@ -476,8 +485,10 @@ unchanged. `id` is server-owned and never client-settable.
 | GET | `/exports/backup` | Download a full, consistent SQLite database snapshot. |
 | GET | `/exports/entries.csv` | Download completed entries as CSV. |
 | GET | `/exports/report.html` | View an Outlook-pasteable HTML report. |
+| GET | `/exports/report.md` | Download a Markdown report. |
+| GET | `/exports/report.pdf` | Download a PDF report. |
 
-All three are plain `GET` downloads (no request body); none require or accept pagination
+All five are plain `GET` downloads (no request body); none require or accept pagination
 params. `app/routers/exports.py` implements them.
 
 ### `GET /exports/backup`
@@ -516,11 +527,58 @@ None`. Internally calls `get_reports_summary` (the same aggregation `GET /report
 and renders its `ReportSummaryResponse` as HTML — no separate aggregation logic.
 
 Rendered as a single, self-contained, **email-client-safe** document: inline `style="..."`
-attributes and `<table>`-based layout only (no `<style>` block, no external CSS, no JS), so it
-pastes cleanly into Outlook. Includes a heading (period + resolved date range + timezone), a
-totals line (total time as `Hh Mm` + entry count), and `by_category`/`by_tag`/`by_day` tables
-(time shown as `Hh Mm`).
+attributes and `<table>`-based layout only (no `<style>` block, no external CSS, no JS, no SVG —
+Outlook strips all three), so it pastes cleanly into Outlook. Includes a heading (period +
+resolved date range + timezone), a totals line (total time as `Hh Mm` + entry count), three
+horizontal bar charts (proportional-width colored table cells, drawn the same Outlook-safe way),
+and `by_category`/`by_tag`/`by_day` tables (time shown as `Hh Mm`):
+
+- A "By day" chart (`period == week`) or "By week" chart (`period == month | quarter`) — reuses
+  `summary.by_day`/`summary.by_week` respectively (`by_week` is already zero-filled, so this
+  chart never has to fill gaps itself).
+- A "By category" chart beside the by-category table.
+- A "By tag" chart beside the by-tag table.
+
+Each bar's width is proportional to that chart's largest value (`round(100 * value / max_value)`
+percent); bars are `<table>` cells with `background-color`, not images/SVG.
 
 - `200` → `text/html` body, returned **inline** (not `Content-Disposition: attachment` — meant to
   be viewed in a browser and copy-pasted, not downloaded).
+- `422 validation_error` → unrecognized `period` value, malformed `date`.
+
+### `GET /exports/report.md`
+
+Query params: identical to `GET /exports/report.html` (`period: ReportPeriod` required, `date:
+date | None` optional). Internally calls `get_reports_summary` — no separate aggregation logic.
+
+Same content/structure as `GET /exports/report.html` (heading, totals, the same three bar charts,
+`by_category`/`by_tag`/`by_day` tables), rendered as Markdown tables. Bar charts use `█`/`░`
+block characters (20 characters wide, proportional to the chart's largest value) instead of HTML
+bars.
+
+- `200` → `text/markdown` body.
+  - `Content-Disposition: attachment; filename="<label>-report-<YYYYMMDD>.md"` (`<label>` slug
+    as in `GET /exports/entries.csv`; date stamp is the export's generation date).
+- `422 validation_error` → unrecognized `period` value, malformed `date`.
+
+### `GET /exports/report.pdf`
+
+Query params: identical to `GET /exports/report.html`. Internally calls `get_reports_summary` —
+no separate aggregation logic.
+
+Same content/structure as `GET /exports/report.html`, rendered with **fpdf2** (pure Python, no
+system libraries required — chosen over e.g. weasyprint, which needs cairo/pango and would be a
+poor fit for an offline local app). Bar charts are drawn as real filled rectangles
+(`FPDF.rect(..., style="F")`), proportional to the chart's largest value; tables are drawn as
+bordered cells.
+
+**Character set limitation:** fpdf2's built-in Helvetica font only supports Latin-1. Any free-text
+string that reaches the PDF (category/tag names, chart labels, the database label, etc.) is passed
+through a lossy Latin-1 sanitizer, so characters outside Latin-1 (e.g. emoji, CJK) render as `?` in
+the PDF only — `GET /exports/report.html` and `GET /exports/report.md` render the original
+characters intact.
+
+- `200` → `application/pdf` body.
+  - `Content-Disposition: attachment; filename="<label>-report-<YYYYMMDD>.pdf"` (`<label>` slug
+    as in `GET /exports/entries.csv`; date stamp is the export's generation date).
 - `422 validation_error` → unrecognized `period` value, malformed `date`.

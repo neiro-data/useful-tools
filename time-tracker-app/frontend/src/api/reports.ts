@@ -14,10 +14,10 @@ export function getReportNarrative(period: ReportPeriod, date?: string): Promise
  * / anchor clicks in the page rather than through `apiRequest` (which always JSON-parses the
  * response body). These helpers just build the query-scoped URL strings.
  */
-export function getReportHtmlExportUrl(period: ReportPeriod, date?: string): string {
+export function getReportExportUrl(format: "html" | "md" | "pdf", period: ReportPeriod, date?: string): string {
   const params = new URLSearchParams({ period });
   if (date) params.set("date", date);
-  return `${API_PREFIX}/exports/report.html?${params.toString()}`;
+  return `${API_PREFIX}/exports/report.${format}?${params.toString()}`;
 }
 
 export function getEntriesCsvExportUrl(startDate: string, endDate: string): string {

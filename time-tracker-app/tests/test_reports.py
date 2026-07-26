@@ -327,6 +327,170 @@ def test_reports_summary_invalid_period_is_validation_error(client: TestClient) 
     assert isinstance(body["error"]["details"]["fields"], list)
 
 
+def _set_week_start(client: TestClient, week_starts_on: str) -> None:
+    response = client.patch("/settings", json={"week_starts_on": week_starts_on})
+    assert response.status_code == 200
+
+
+# --- by_week -------------------------------------------------------------------------------
+
+
+def test_reports_summary_by_week_sums_to_total_minutes_for_partial_boundary_weeks_month(
+    client: TestClient,
+) -> None:
+    """The load-bearing invariant: sum(w.total_minutes for w in by_week) == total_minutes, even
+    when the month's first and last weeks are only partially inside the period (July 2026 with
+    Monday-start weeks: first week is 06-29..07-05 clipped to 07-01..07-05, last week is
+    07-27..08-02 clipped to 07-27..07-31)."""
+    _build_fixture(client)
+
+    response = client.get("/reports/summary", params={"period": "month", "date": "2026-07-15"})
+
+    assert response.status_code == 200
+    body = response.json()
+    by_week = body["by_week"]
+    assert sum(w["total_minutes"] for w in by_week) == body["total_minutes"]
+    assert body["total_minutes"] == 225
+
+
+def test_reports_summary_by_week_sums_to_total_minutes_for_partial_boundary_weeks_quarter(
+    client: TestClient,
+) -> None:
+    _build_fixture(client)
+
+    response = client.get("/reports/summary", params={"period": "quarter", "date": "2026-07-15"})
+
+    assert response.status_code == 200
+    body = response.json()
+    by_week = body["by_week"]
+    assert sum(w["total_minutes"] for w in by_week) == body["total_minutes"]
+    assert body["total_minutes"] == 240
+
+
+def test_reports_summary_by_week_is_zero_filled_chronological_and_gap_free(
+    client: TestClient,
+) -> None:
+    """Weeks with no entries still appear (unlike by_day), the list is ordered by week_start
+    ascending, and consecutive weeks are exactly 7 days apart (no gaps)."""
+    _build_fixture(client)
+
+    response = client.get("/reports/summary", params={"period": "month", "date": "2026-07-15"})
+
+    body = response.json()
+    by_week = body["by_week"]
+    week_starts = [w["week_start"] for w in by_week]
+    assert week_starts == sorted(week_starts)
+
+    # Zero-filled: the second week (2026-07-06..07-12) has no entries in the fixture.
+    zero_week = next(w for w in by_week if w["week_start"] == "2026-07-06")
+    assert zero_week["total_minutes"] == 0
+    assert zero_week["entry_count"] == 0
+
+    # Gap-free: reconstructing unclipped week_start values (the "anchor" for each row's bucket)
+    # by walking 7 days forward from the first row's week_start covers every subsequent row's
+    # underlying bucket with no skipped week.
+    from datetime import date, timedelta
+
+    unclipped_starts = []
+    cursor = date(2026, 6, 29)  # first (partial) week's unclipped start, per _week_start_for
+    while cursor <= date(2026, 7, 31):
+        unclipped_starts.append(cursor)
+        cursor += timedelta(days=7)
+    assert len(unclipped_starts) == len(by_week)
+
+
+def test_reports_summary_by_week_bounds_never_exceed_period_bounds(client: TestClient) -> None:
+    """week_start/week_end are clipped to the period, so the first week's week_start can't be
+    earlier than start_date and the last week's week_end can't be later than end_date."""
+    _build_fixture(client)
+
+    response = client.get("/reports/summary", params={"period": "month", "date": "2026-07-15"})
+
+    body = response.json()
+    by_week = body["by_week"]
+    for week in by_week:
+        assert body["start_date"] <= week["week_start"] <= week["week_end"] <= body["end_date"]
+    assert by_week[0]["week_start"] == body["start_date"]
+    assert by_week[-1]["week_end"] == body["end_date"]
+
+
+def test_reports_summary_by_day_stays_sparse_unlike_by_week(client: TestClient) -> None:
+    """Deliberate asymmetry: by_day omits empty days while by_week zero-fills every overlapping
+    week. Guards against a future change silently flipping this behavior."""
+    _build_fixture(client)
+
+    response = client.get("/reports/summary", params={"period": "month", "date": "2026-07-15"})
+
+    body = response.json()
+    # July has 31 days but only 4 have completed entries in the fixture.
+    assert len(body["by_day"]) == 4
+    # Meanwhile by_week zero-fills every week overlapping the month (5 weeks, Monday-start).
+    assert len(body["by_week"]) == 5
+    assert any(w["total_minutes"] == 0 for w in body["by_week"])
+    assert all(d["total_minutes"] > 0 for d in body["by_day"])
+
+
+# --- week_starts_on --------------------------------------------------------------------------
+
+
+def test_reports_summary_week_period_bounds_shift_with_sunday_week_start(
+    client: TestClient,
+) -> None:
+    _set_week_start(client, "sunday")
+
+    response = client.get("/reports/summary", params={"period": "week", "date": "2026-07-15"})
+
+    assert response.status_code == 200
+    body = response.json()
+    # Monday-start (default) would resolve to 2026-07-13..07-19; Sunday-start shifts it back a day.
+    assert body["start_date"] == "2026-07-12"
+    assert body["end_date"] == "2026-07-18"
+
+
+def test_reports_summary_week_period_bounds_default_to_monday(client: TestClient) -> None:
+    response = client.get("/reports/summary", params={"period": "week", "date": "2026-07-15"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["start_date"] == "2026-07-13"
+    assert body["end_date"] == "2026-07-19"
+
+
+def test_reports_summary_by_week_buckets_shift_with_sunday_week_start(
+    client: TestClient,
+) -> None:
+    """by_week's bucket boundaries follow week_starts_on and stay consistent with the (also
+    shifted) period bounds."""
+    _build_fixture(client)
+    _set_week_start(client, "sunday")
+
+    response = client.get("/reports/summary", params={"period": "month", "date": "2026-07-15"})
+
+    assert response.status_code == 200
+    body = response.json()
+    by_week = body["by_week"]
+
+    # Sunday-start week buckets for July 2026: 06-28..07-04, 07-05..07-11, 07-12..07-18,
+    # 07-19..07-25, 07-26..08-01 -- clipped to the month bounds.
+    assert [w["week_start"] for w in by_week] == [
+        "2026-07-01",
+        "2026-07-05",
+        "2026-07-12",
+        "2026-07-19",
+        "2026-07-26",
+    ]
+    assert [w["week_end"] for w in by_week] == [
+        "2026-07-04",
+        "2026-07-11",
+        "2026-07-18",
+        "2026-07-25",
+        "2026-07-31",
+    ]
+    assert sum(w["total_minutes"] for w in by_week) == body["total_minutes"]
+    for week in by_week:
+        assert body["start_date"] <= week["week_start"] <= week["week_end"] <= body["end_date"]
+
+
 def test_reports_summary_day_boundary_resolves_against_configured_timezone(
     client: TestClient,
 ) -> None:

@@ -161,6 +161,13 @@ export interface ReportDayBreakdown {
   entry_count: number;
 }
 
+export interface ReportWeekBreakdown {
+  week_start: string;
+  week_end: string;
+  total_minutes: number;
+  entry_count: number;
+}
+
 export interface ReportSummaryResponse {
   period: ReportPeriod;
   start_date: string;
@@ -171,6 +178,7 @@ export interface ReportSummaryResponse {
   by_category: ReportCategoryBreakdown[];
   by_tag: ReportTagBreakdown[];
   by_day: ReportDayBreakdown[];
+  by_week: ReportWeekBreakdown[];
 }
 
 export interface ReportNarrativeResponse {

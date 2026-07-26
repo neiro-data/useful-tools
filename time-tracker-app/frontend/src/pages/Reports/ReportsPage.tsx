@@ -1,9 +1,11 @@
-import { useMemo, useState, type ReactElement } from "react";
-import { getBackupExportUrl, getEntriesCsvExportUrl, getReportHtmlExportUrl } from "../../api/reports";
-import type { ReportPeriod } from "../../api/types";
+import { useEffect, useMemo, useState, type ReactElement } from "react";
+import { getBackupExportUrl, getEntriesCsvExportUrl, getReportExportUrl } from "../../api/reports";
+import { getSettings } from "../../api/settings";
+import type { ExportFormat, ReportPeriod } from "../../api/types";
 import { useReportSummary } from "../../hooks/useReportSummary";
 import { SegmentedBreakdown } from "../../components/SegmentedBreakdown/SegmentedBreakdown";
 import { MiniBarChart } from "../../components/MiniBarChart/MiniBarChart";
+import { barsFromDays, barsFromWeeks } from "../../components/MiniBarChart/bars";
 import { Skeleton } from "../../components/Skeleton/Skeleton";
 import { formatDurationMinutes } from "../../utils/duration";
 import type { BreakdownSegment } from "../../utils/aggregate";
@@ -14,6 +16,34 @@ const PERIOD_OPTIONS: { value: ReportPeriod; label: string }[] = [
   { value: "month", label: "Month" },
   { value: "quarter", label: "Quarter" },
 ];
+
+const REPORT_EXPORT_OPTIONS: { value: "html" | "md" | "pdf"; label: string }[] = [
+  { value: "html", label: "HTML" },
+  { value: "md", label: "Markdown" },
+  { value: "pdf", label: "PDF" },
+];
+
+/** Steps the anchor one whole period in `direction`, using calendar arithmetic on local date parts
+ * rather than a fixed millisecond offset. A fixed offset is wrong three ways: a 30-day "month" step
+ * back from Mar 31 lands on Mar 1 (same month — the button does nothing) and forward from Jan 31
+ * skips February entirely; a 91-day "quarter" overshoots a 90-day Q1; and adding raw milliseconds
+ * across a DST transition lands on 23:00 the previous local day, so `toIsoDate` reads a date one
+ * off. Month/quarter normalize to the 1st, which also avoids JS month-overflow (`setMonth` on Jan 31
+ * yields Mar 3). The backend re-expands whatever day it gets to the containing period. */
+function stepAnchor(anchor: Date, period: ReportPeriod, direction: -1 | 1): Date {
+  const year = anchor.getFullYear();
+  const month = anchor.getMonth();
+  if (period === "week") {
+    const next = new Date(year, month, anchor.getDate());
+    next.setDate(next.getDate() + 7 * direction);
+    return next;
+  }
+  if (period === "month") {
+    return new Date(year, month + direction, 1);
+  }
+  const quarterStartMonth = Math.floor(month / 3) * 3;
+  return new Date(year, quarterStartMonth + 3 * direction, 1);
+}
 
 /** Zero-fills every day in `[startDate, endDate]` (inclusive) with a report day's minutes, since
  * `by_day` from the backend omits days with no entries but `MiniBarChart` expects a contiguous
@@ -46,6 +76,13 @@ function formatDateRange(startDate: string, endDate: string): string {
   return `${startLabel} – ${endLabel}`;
 }
 
+function toIsoDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 /** Reports screen (Task 5, `design/screens.md` follow-on): period-based summary + rule-based
  * narrative, backed by `GET /reports/summary` and `GET /reports/narrative`. Unlike Week/Month, all
  * aggregation happens server-side — this page just renders the response and zero-fills `by_day`
@@ -53,7 +90,14 @@ function formatDateRange(startDate: string, endDate: string): string {
 export function ReportsPage(): ReactElement {
   const [period, setPeriod] = useState<ReportPeriod>("week");
   const [dateAnchor, setDateAnchor] = useState<string | undefined>(undefined);
+  const [defaultExportFormat, setDefaultExportFormat] = useState<ExportFormat>("html");
   const { summary, narrative, loading, error } = useReportSummary(period, dateAnchor);
+
+  useEffect(() => {
+    getSettings()
+      .then((settings) => setDefaultExportFormat(settings.default_export_format))
+      .catch(() => undefined);
+  }, []);
 
   const categoryBreakdown = useMemo<BreakdownSegment[]>(() => {
     if (!summary) return [];
@@ -79,13 +123,21 @@ export function ReportsPage(): ReactElement {
     }));
   }, [summary]);
 
-  const chartDays = useMemo(() => {
+  const chartBars = useMemo(() => {
     if (!summary) return [];
-    return zeroFillDays(summary.start_date, summary.end_date, summary.by_day);
+    if (summary.period === "week") {
+      return barsFromDays(zeroFillDays(summary.start_date, summary.end_date, summary.by_day));
+    }
+    return barsFromWeeks(summary.by_week);
   }, [summary]);
 
-  function handleExportHtml(): void {
-    window.open(getReportHtmlExportUrl(period, dateAnchor), "_blank", "noopener");
+  function handlePagePeriod(direction: -1 | 1): void {
+    const anchor = dateAnchor ? new Date(`${dateAnchor}T00:00:00`) : new Date();
+    setDateAnchor(toIsoDate(stepAnchor(anchor, period, direction)));
+  }
+
+  function handleExportReport(format: "html" | "md" | "pdf"): void {
+    window.open(getReportExportUrl(format, period, dateAnchor), "_blank", "noopener");
   }
 
   function handleExportCsv(): void {
@@ -96,6 +148,12 @@ export function ReportsPage(): ReactElement {
   function handleBackupDb(): void {
     window.open(getBackupExportUrl(), "_blank", "noopener");
   }
+
+  const defaultReportFormat = defaultExportFormat === "csv" ? "html" : defaultExportFormat;
+  const orderedExportOptions = [
+    ...REPORT_EXPORT_OPTIONS.filter((option) => option.value === defaultReportFormat),
+    ...REPORT_EXPORT_OPTIONS.filter((option) => option.value !== defaultReportFormat),
+  ];
 
   return (
     <div className={styles.page}>
@@ -118,8 +176,16 @@ export function ReportsPage(): ReactElement {
           </div>
           <div className={styles.dateAnchor}>
             <label htmlFor="report-date-anchor" className={styles.dateAnchorLabel}>
-              Date
+              Anchor date
             </label>
+            <button
+              type="button"
+              aria-label={`Previous ${period}`}
+              className={styles.dateAnchorNav}
+              onClick={() => handlePagePeriod(-1)}
+            >
+              ‹
+            </button>
             <input
               id="report-date-anchor"
               type="date"
@@ -127,6 +193,14 @@ export function ReportsPage(): ReactElement {
               value={dateAnchor ?? ""}
               onChange={(event) => setDateAnchor(event.target.value || undefined)}
             />
+            <button
+              type="button"
+              aria-label={`Next ${period}`}
+              className={styles.dateAnchorNav}
+              onClick={() => handlePagePeriod(1)}
+            >
+              ›
+            </button>
             {dateAnchor && (
               <button
                 type="button"
@@ -140,6 +214,9 @@ export function ReportsPage(): ReactElement {
           </div>
         </div>
       </header>
+      <p className={styles.dateAnchorHint}>
+        Any date in the {period} — the report expands to cover the whole {period} it falls in.
+      </p>
 
       {error && (
         <div className={styles.errorBanner} role="alert">
@@ -167,9 +244,11 @@ export function ReportsPage(): ReactElement {
                 {summary.entry_count} {summary.entry_count === 1 ? "entry" : "entries"}
               </p>
               <div className={styles.exportActions}>
-                <button type="button" onClick={handleExportHtml}>
-                  Export HTML
-                </button>
+                {orderedExportOptions.map((option) => (
+                  <button key={option.value} type="button" onClick={() => handleExportReport(option.value)}>
+                    Export {option.label}
+                  </button>
+                ))}
                 <button type="button" onClick={handleExportCsv}>
                   Export CSV
                 </button>
@@ -184,9 +263,9 @@ export function ReportsPage(): ReactElement {
             </div>
           </div>
 
-          {chartDays.length > 0 && (
+          {chartBars.length > 0 && (
             <div className={styles.chartCard}>
-              <MiniBarChart days={chartDays} />
+              <MiniBarChart bars={chartBars} />
             </div>
           )}
 
