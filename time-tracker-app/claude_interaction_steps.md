@@ -808,31 +808,3 @@ that ad-hoc `sqlite3` sessions do *not* inherit), plus a table of the three expl
 each serves.
 
 **Agents:** none. Single-file documentation change read straight off `app/db_schema.py`.
-
-## Branch `test-reports-dummy-data` — sample report output from the dummy database
-
-No application code changed. Regenerated `dummy.db` with a longer history and captured the
-report/export endpoints' output into a new, committed `test_reports/` folder.
-
-**Data.** `uv run python -m app.dummy_data --days 240 --reset` — 690 completed entries spanning
-2025-11-27 → 2026-07-24, weekends skipped. Deliberately no new categories: the generator attaches
-entries to whatever `seed/categories.toml` already defines (the five existing ones), so this stays a
-volume exercise, not a schema/seed change. 240 days was picked because 28 (the default) cannot fill
-a quarter, and the quarter case is the one that exercises the multi-month bucketing.
-
-**Reports.** Server run with `TIME_TRACKER_DATABASE_PATH=$PWD/dummy.db` on port 8123 so nothing
-touched the real `time_tracker.db`. One case per period (`week`/`month`/`quarter`) × per format
-(`/reports/summary`, `/reports/narrative`, `/exports/report.html`, `/exports/entries.csv`) = 12
-files, all anchored on the same fixed `date=2026-06-15` so the three periods nest (week ⊂ month ⊂
-quarter) and can be compared against each other. A "today"-relative anchor was avoided on purpose —
-the checked-in output would otherwise go stale the moment the date rolls over.
-
-`/exports/entries.csv` is the odd one out: it takes `start_date`/`end_date` rather than a `period`,
-so each CSV was requested with the bounds the matching `summary.json` resolved to. That doubles as
-the verification — CSV row count equals the summary's `entry_count` for all three periods (20 / 89 /
-265), and the JSON, narrative and HTML for a period all report the same totals.
-
-`/exports/backup` was left out: it returns a full SQLite snapshot, not a report, and its content is
-`dummy.db` itself. Noted in `test_reports/README.md` rather than silently omitted.
-
-**Agents:** none. Data generation and HTTP capture, no code to design or review.
