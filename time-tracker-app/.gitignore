@@ -46,5 +46,8 @@ frontend/dist/
 frontend/coverage/
 *.tsbuildinfo
 
-# tests (not to be committed)
-test_reports/
+# tests (not to be committed) — generated report fixtures, but keep the README that documents
+# how to regenerate them. Must be `test_reports/*`, not `test_reports/`: an ignored *directory* is
+# never descended into, so the negation below would not be seen.
+test_reports/*
+!test_reports/README.md
