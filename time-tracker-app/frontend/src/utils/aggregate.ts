@@ -55,6 +55,58 @@ export function breakdownByCategory(entries: EntryRead[]): BreakdownSegment[] {
     .sort((a, b) => b.minutes - a.minutes);
 }
 
+/** One Monday-start week bucket for `MonthPage`'s mini bar chart. `weekStart`/`weekEnd` are
+ * `YYYY-MM-DD`, clipped to `[rangeStart, rangeEnd]` (a calendar month rarely starts/ends on a
+ * Monday), so the buckets always sum to the month's total. */
+export interface WeekBucket {
+  weekStart: string;
+  weekEnd: string;
+  minutes: number;
+}
+
+function toIsoDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/** Buckets `entries` into Monday-start weeks spanning `[rangeStart, rangeEnd]` (inclusive,
+ * `YYYY-MM-DD`), clipping the first/last bucket to the range bounds. Used by `MonthPage`, which
+ * aggregates client-side from `/entries` rather than a report endpoint. */
+export function groupByWeek(entries: EntryRead[], rangeStart: string, rangeEnd: string): WeekBucket[] {
+  const grouped = groupByDay(entries);
+  const rangeStartDate = new Date(`${rangeStart}T00:00:00`);
+  const rangeEndDate = new Date(`${rangeEnd}T00:00:00`);
+
+  const firstDay = rangeStartDate.getDay(); // 0 = Sunday
+  const mondayOffset = firstDay === 0 ? -6 : 1 - firstDay;
+  const cursor = new Date(rangeStartDate);
+  cursor.setDate(cursor.getDate() + mondayOffset);
+
+  const buckets: WeekBucket[] = [];
+  while (cursor <= rangeEndDate) {
+    const weekMonday = new Date(cursor);
+    const weekSunday = new Date(cursor);
+    weekSunday.setDate(weekSunday.getDate() + 6);
+
+    const clippedStart = weekMonday < rangeStartDate ? rangeStartDate : weekMonday;
+    const clippedEnd = weekSunday > rangeEndDate ? rangeEndDate : weekSunday;
+
+    let minutes = 0;
+    const day = new Date(clippedStart);
+    while (day <= clippedEnd) {
+      minutes += totalMinutes(grouped.get(toIsoDate(day)) ?? []);
+      day.setDate(day.getDate() + 1);
+    }
+
+    buckets.push({ weekStart: toIsoDate(clippedStart), weekEnd: toIsoDate(clippedEnd), minutes });
+    cursor.setDate(cursor.getDate() + 7);
+  }
+
+  return buckets;
+}
+
 export function breakdownByTag(entries: EntryRead[]): BreakdownSegment[] {
   const totals = new Map<string, { label: string; minutes: number }>();
   for (const entry of entries) {

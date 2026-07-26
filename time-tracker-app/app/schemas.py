@@ -428,11 +428,52 @@ class ReportDayBreakdown(BaseModel):
     entry_count: int
 
 
+class ReportWeekBreakdown(BaseModel):
+    """One row of :attr:`ReportSummaryResponse.by_week`.
+
+    Every week overlapping the resolved period is included, in chronological order, even if it
+    has zero completed entries (zero-filled) — unlike :class:`ReportDayBreakdown`. Week
+    boundaries follow ``settings.week_starts_on``. There is deliberately **no** ISO-week-number
+    field: ISO week numbering is always Monday-based, which would be wrong to display alongside
+    a week that may start on Sunday. ``week_start``/``week_end`` are **clipped** to the resolved
+    period's ``start_date``/``end_date`` (so a week that only partially overlaps the period shows
+    only the overlapping days), which guarantees
+    ``sum(w.total_minutes for w in by_week) == total_minutes``.
+    """
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "week_start": "2026-07-13",
+                "week_end": "2026-07-19",
+                "total_minutes": 270,
+                "entry_count": 4,
+            }
+        }
+    )
+
+    week_start: date = Field(
+        description="Local, inclusive start of this week, clipped to the period's start_date."
+    )
+    week_end: date = Field(
+        description="Local, inclusive end of this week, clipped to the period's end_date."
+    )
+    total_minutes: int
+    entry_count: int
+
+
 class ReportSummaryResponse(BaseModel):
     """Response for ``GET /reports/summary``.
 
     Covers only *completed* entries (``end_ts IS NOT NULL``), consistent with ``/today``. All
     durations/sums are computed server-side from stored ``duration_minutes`` values.
+
+    ``by_week`` and ``by_day`` are deliberately asymmetric: ``by_week`` is zero-filled (every
+    week overlapping the period appears, even with no entries) while ``by_day`` omits empty days
+    entirely. ``by_week`` is zero-filled because it is small and bounded (a quarter is at most ~14
+    weeks) and zero-filling keeps chart/table rendering simple; ``by_day`` is left sparse because
+    a quarter can span ~90 days and the frontend already handles gap-filling for dense day series
+    (e.g. calendar heatmaps) when it needs one.
     """
 
     model_config = ConfigDict(
@@ -447,6 +488,7 @@ class ReportSummaryResponse(BaseModel):
                 "by_category": [],
                 "by_tag": [],
                 "by_day": [],
+                "by_week": [],
             }
         }
     )
@@ -464,6 +506,11 @@ class ReportSummaryResponse(BaseModel):
     by_day: list[ReportDayBreakdown] = Field(
         description="One entry per local day that has at least one completed entry, ascending"
         " by date."
+    )
+    by_week: list[ReportWeekBreakdown] = Field(
+        description="One entry per local week overlapping the period, ascending by week_start,"
+        " zero-filled (weeks with no entries still appear). See class docstring for why this is"
+        " zero-filled while by_day is not."
     )
 
 

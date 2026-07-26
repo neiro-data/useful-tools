@@ -44,6 +44,22 @@ def get_settings_timezone(db: sqlite3.Connection) -> str:
     return tz_name
 
 
+def get_settings_week_start(db: sqlite3.Connection) -> str:
+    """Read ``settings.week_starts_on`` (falling back to ``"monday"`` if no settings row exists
+    yet). Value is expected to be ``"monday"`` or ``"sunday"``, but that is only enforced at the
+    API layer, by ``SettingsUpdate``'s ``WeekStart`` literal in ``app/schemas.py`` — unlike its
+    sibling columns, ``settings.week_starts_on`` in ``app/db_schema.py`` has no DB-level ``CHECK``
+    constraint, so a direct write to the database (bypassing the API) could store something else.
+    TODO: add a ``CHECK`` constraint to ``settings.week_starts_on`` in ``app/db_schema.py`` — needs
+    a schema migration for existing databases, so left as a follow-up rather than done here.
+    Callers that treat any non-``"sunday"`` value as Monday-start (see
+    ``app/routers/reports.py::_week_start_for``) are relying on that API-layer validation, not a DB
+    guarantee."""
+    row = db.execute("SELECT week_starts_on FROM settings LIMIT 1").fetchone()
+    week_start: str = row["week_starts_on"] if row is not None else "monday"
+    return week_start
+
+
 def local_day_bounds_utc(tz_name: str, local_date: date) -> tuple[str, str]:
     """UTC ISO-8601 ``(start, end)`` bounds covering a single local calendar day.
 

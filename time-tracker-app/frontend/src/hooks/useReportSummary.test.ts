@@ -24,6 +24,7 @@ function makeSummary(overrides: Partial<ReportSummaryResponse> = {}): ReportSumm
     by_category: [],
     by_tag: [],
     by_day: [],
+    by_week: [],
     ...overrides,
   };
 }

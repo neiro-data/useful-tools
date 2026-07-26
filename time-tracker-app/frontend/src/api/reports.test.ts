@@ -3,7 +3,7 @@ import { apiRequest } from "./client";
 import {
   getBackupExportUrl,
   getEntriesCsvExportUrl,
-  getReportHtmlExportUrl,
+  getReportExportUrl,
   getReportNarrative,
   getReportSummary,
 } from "./reports";
@@ -62,15 +62,20 @@ describe("getReportNarrative", () => {
   });
 });
 
-describe("getReportHtmlExportUrl", () => {
+describe("getReportExportUrl", () => {
   it("builds the export URL with just the period when no date anchor is given", () => {
-    expect(getReportHtmlExportUrl("week")).toBe("/api/exports/report.html?period=week");
+    expect(getReportExportUrl("html", "week")).toBe("/api/exports/report.html?period=week");
   });
 
   it("includes the date anchor when provided", () => {
-    expect(getReportHtmlExportUrl("month", "2026-07-01")).toBe(
+    expect(getReportExportUrl("html", "month", "2026-07-01")).toBe(
       "/api/exports/report.html?period=month&date=2026-07-01",
     );
+  });
+
+  it("builds markdown and pdf export URLs", () => {
+    expect(getReportExportUrl("md", "week")).toBe("/api/exports/report.md?period=week");
+    expect(getReportExportUrl("pdf", "week")).toBe("/api/exports/report.pdf?period=week");
   });
 });
 

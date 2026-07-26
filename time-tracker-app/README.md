@@ -13,9 +13,9 @@ cloud dependency — all data lives in a local SQLite file.
 - **Time tracking** — log entries against categories and tags; a live timer for the current task.
 - **Today / Week / Month** — review tracked time across day, week, and month views.
 - **Reports** — period summaries (week/month/quarter) with per-category and per-tag breakdowns,
-  daily bars, and a rule-based narrative summary of the period.
-- **Exports** — download your data as an Outlook-friendly HTML report, a CSV, or a raw SQLite
-  database backup.
+  daily bars, zero-filled weekly bars, and a rule-based narrative summary of the period.
+- **Exports** — download your data as an Outlook-friendly HTML report (with bar-chart graphics),
+  a Markdown report, a PDF report, a CSV, or a raw SQLite database backup.
 - **Settings** — configure timezone (drives day boundaries), week start, default entry mode, and
   default export format.
 

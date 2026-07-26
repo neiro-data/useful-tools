@@ -7,10 +7,12 @@ import { usePeriodEntries } from "../../hooks/usePeriodEntries";
 import { useRunningTimer } from "../../hooks/useRunningTimer";
 import { DayGroup } from "../../components/DayGroup/DayGroup";
 import { SegmentedBreakdown } from "../../components/SegmentedBreakdown/SegmentedBreakdown";
+import { MiniBarChart } from "../../components/MiniBarChart/MiniBarChart";
+import { barsFromWeeks } from "../../components/MiniBarChart/bars";
 import { TimerBanner } from "../../components/TimerBanner/TimerBanner";
 import { Skeleton } from "../../components/Skeleton/Skeleton";
 import { getMonthRange, enumerateDays, formatMonthHeading, isToday } from "../../utils/dateRange";
-import { breakdownByCategory, breakdownByTag, groupByDay, totalMinutes } from "../../utils/aggregate";
+import { breakdownByCategory, breakdownByTag, groupByDay, groupByWeek, totalMinutes } from "../../utils/aggregate";
 import { formatDurationMinutes } from "../../utils/duration";
 import type { EntryRowSaveValues } from "../../components/EntryRow/EntryRow";
 import styles from "./MonthPage.module.css";
@@ -59,6 +61,16 @@ export function MonthPage(): ReactElement {
   const total = totalMinutes(entries);
   const categoryBreakdown = useMemo(() => breakdownByCategory(entries), [entries]);
   const tagBreakdown = useMemo(() => breakdownByTag(entries), [entries]);
+  const chartBars = useMemo(
+    () => barsFromWeeks(
+      groupByWeek(entries, range.startDate, range.endDate).map((week) => ({
+        week_start: week.weekStart,
+        week_end: week.weekEnd,
+        total_minutes: week.minutes,
+      })),
+    ),
+    [entries, range],
+  );
 
   // Newest day first, mirroring Week's reverse-chronological entry ordering.
   const orderedDays = useMemo(() => [...days].reverse(), [days]);
@@ -113,6 +125,7 @@ export function MonthPage(): ReactElement {
               <p className={styles.totalValue}>
                 {total === 0 ? "0m — nothing logged yet this month" : formatDurationMinutes(total)}
               </p>
+              <MiniBarChart bars={chartBars} />
             </div>
             <div className={styles.breakdownCard}>
               <SegmentedBreakdown title="By category" segments={categoryBreakdown} variant="category" />

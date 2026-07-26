@@ -6,12 +6,19 @@ import calendar
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
+from datetime import date as DateType
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter
 
 from app.deps import DbDep
-from app.repo import category_from_row, get_settings_timezone, local_range_bounds_utc, tag_from_row
+from app.repo import (
+    category_from_row,
+    get_settings_timezone,
+    get_settings_week_start,
+    local_range_bounds_utc,
+    tag_from_row,
+)
 from app.schemas import (
     ReportCategoryBreakdown,
     ReportDayBreakdown,
@@ -19,6 +26,7 @@ from app.schemas import (
     ReportPeriod,
     ReportSummaryResponse,
     ReportTagBreakdown,
+    ReportWeekBreakdown,
 )
 
 router = APIRouter(prefix="/reports", tags=["reports"])
@@ -52,11 +60,42 @@ class _DayBucket(_Bucket):
     local_date: date = date.min
 
 
-def _resolve_period_bounds(period: ReportPeriod, anchor: date) -> tuple[date, date]:
+@dataclass
+class _WeekBucket(_Bucket):
+    week_start: date = date.min
+    week_end: date = date.min
+
+
+def _week_start_for(local_date: date, week_starts_on: str) -> date:
+    """Local calendar date on which the week containing ``local_date`` begins, per
+    ``week_starts_on`` (``"monday"`` or ``"sunday"``).
+
+    ``week_starts_on`` is only validated at the API layer (``SettingsUpdate``'s ``WeekStart``
+    literal) — there is no DB-level ``CHECK`` on ``settings.week_starts_on`` (see
+    ``get_settings_week_start``'s docstring in ``app/repo.py``), so a row written outside the API
+    could hold something other than ``"monday"``/``"sunday"``. This is a deliberate, explicit
+    choice, not an accidental fall-through: any value other than the literal ``"sunday"`` (e.g. a
+    garbage/malformed stored value) is treated as Monday-start, since raising a 500 on a bad stored
+    setting would be worse for a personal offline app than silently defaulting to the more common
+    convention.
+    """
+    if week_starts_on == "sunday":
+        offset = (local_date.weekday() + 1) % 7
+    else:
+        # Explicit default, not an accidental catch-all: anything other than "sunday" (including a
+        # malformed/garbage stored value) is treated as Monday-start. See docstring above.
+        offset = local_date.weekday()
+    return local_date - timedelta(days=offset)
+
+
+def _resolve_period_bounds(
+    period: ReportPeriod, anchor: date, week_starts_on: str = "monday"
+) -> tuple[date, date]:
     """Resolve the local, inclusive ``(start_date, end_date)`` for the period containing
-    ``anchor``."""
+    ``anchor``. ``week_starts_on`` (``"monday"`` or ``"sunday"``) only affects
+    ``ReportPeriod.WEEK``."""
     if period == ReportPeriod.WEEK:
-        start = anchor - timedelta(days=anchor.weekday())
+        start = _week_start_for(anchor, week_starts_on)
         end = start + timedelta(days=6)
         return start, end
 
@@ -103,13 +142,15 @@ def get_reports_summary(
     duration/sum is computed server-side from stored ``duration_minutes`` values, never trusted
     from the client. An entry linked to multiple tags contributes its full duration to each of
     those tags in ``by_tag`` (so ``by_tag`` totals may double-count minutes across tags);
-    ``by_day`` only includes local days that have at least one completed entry.
+    ``by_day`` only includes local days that have at least one completed entry, while ``by_week``
+    is zero-filled (see ``ReportSummaryResponse``'s docstring).
     """
     tz_name = get_settings_timezone(db)
+    week_starts_on = get_settings_week_start(db)
     tz = ZoneInfo(tz_name)
     anchor = date if date is not None else datetime.now(tz).date()
 
-    start_date, end_date = _resolve_period_bounds(period, anchor)
+    start_date, end_date = _resolve_period_bounds(period, anchor, week_starts_on)
     start_utc, end_utc = local_range_bounds_utc(tz_name, start_date, end_date)
 
     entry_rows = _fetch_completed_entries(db, start_utc, end_utc)
@@ -118,6 +159,18 @@ def get_reports_summary(
     by_category: dict[int | None, _Bucket] = {}
     by_tag: dict[int, _TagBucket] = {}
     by_day: dict[str, _DayBucket] = {}
+    by_week: dict[DateType, _WeekBucket] = {}
+
+    # Zero-fill every week overlapping [start_date, end_date], clipped to the period bounds, so
+    # sum(w.total_minutes for w in by_week) == total_minutes holds even before any entries are
+    # added below.
+    cursor = _week_start_for(start_date, week_starts_on)
+    while cursor <= end_date:
+        unclipped_end = cursor + timedelta(days=6)
+        clipped_start = max(cursor, start_date)
+        clipped_end = min(unclipped_end, end_date)
+        by_week[cursor] = _WeekBucket(week_start=clipped_start, week_end=clipped_end)
+        cursor += timedelta(days=7)
 
     for row in entry_rows:
         duration = round(row["duration_minutes"] or 0)
@@ -139,6 +192,11 @@ def get_reports_summary(
 
         local_date = datetime.fromisoformat(row["start_ts"]).astimezone(tz).date()
         by_day.setdefault(local_date.isoformat(), _DayBucket(local_date=local_date)).add(duration)
+
+        week_key = _week_start_for(local_date, week_starts_on)
+        # Every week overlapping the period was pre-seeded above, so week_key must already be
+        # present (entries are already filtered to [start_date, end_date] by the SQL query).
+        by_week[week_key].add(duration)
 
     category_breakdown = [
         ReportCategoryBreakdown(
@@ -176,6 +234,16 @@ def get_reports_summary(
         for bucket in sorted(by_day.values(), key=lambda item: item.local_date)
     ]
 
+    week_breakdown = [
+        ReportWeekBreakdown(
+            week_start=bucket.week_start,
+            week_end=bucket.week_end,
+            total_minutes=bucket.total_minutes,
+            entry_count=bucket.entry_count,
+        )
+        for bucket in (by_week[key] for key in sorted(by_week))
+    ]
+
     return ReportSummaryResponse(
         period=period,
         start_date=start_date,
@@ -186,6 +254,7 @@ def get_reports_summary(
         by_category=category_breakdown,
         by_tag=tag_breakdown,
         by_day=day_breakdown,
+        by_week=week_breakdown,
     )
 
 
