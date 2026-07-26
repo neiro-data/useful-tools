@@ -45,3 +45,6 @@ node_modules/
 frontend/dist/
 frontend/coverage/
 *.tsbuildinfo
+
+# tests (not to be committed)
+test_reports/
