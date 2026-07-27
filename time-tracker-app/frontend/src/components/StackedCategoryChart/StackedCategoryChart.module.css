@@ -28,10 +28,14 @@
   flex-shrink: 0;
 }
 
+/* No `gap` here (unlike `MiniBarChart`'s `.chart`): each of the N `flex: 1` `.column`s must occupy
+   exactly 1/N of the row's width so its centre sits at exactly `(i + 0.5) / N`, matching
+   `CountLineChart`'s point-centring math bucket-for-bucket. A gap would shrink and offset each
+   column, throwing that alignment off. Visual separation between bars still comes from `.stack`
+   only spanning 60% of its column. */
 .columns {
   display: flex;
   align-items: flex-end;
-  gap: var(--space-2);
   height: 140px;
 }
 
@@ -42,6 +46,19 @@
   align-items: center;
   gap: var(--space-1);
   height: 100%;
+}
+
+/* Clipped to its own column: with `.columns` gapless, a quarter's 13 week-buckets leave each
+   column narrow enough that a wide total (`12h 30m`) would otherwise spill over its neighbour's
+   label. The exact figure stays available in the column's `title` tooltip. */
+.value {
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--color-text-secondary);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .track {

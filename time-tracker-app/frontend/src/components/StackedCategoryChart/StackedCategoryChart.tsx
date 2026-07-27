@@ -69,7 +69,18 @@ export function StackedCategoryChart({ buckets, legend }: StackedCategoryChartPr
             .sort((a, b) => (order.get(a.categoryId) ?? 0) - (order.get(b.categoryId) ?? 0));
 
           return (
-            <div key={bucket.key} className={styles.column} title={bucket.title ?? bucket.label}>
+            <div
+              key={bucket.key}
+              className={styles.column}
+              // Bucket + total, matching `MiniBarChart`'s tooltip convention — this is also where
+              // the exact figure stays readable when a narrow column ellipsizes `.value`.
+              title={`${bucket.title ?? bucket.label}: ${formatDurationMinutes(total)}`}
+            >
+              {/* Bucket total, in the same slot/styling as the removed neutral `MiniBarChart`'s
+                  `.value` label (this chart absorbed that chart's "total per bucket" role) — a
+                  small mono-font readout above the track so the total is readable without hovering
+                  for the tooltip. */}
+              <span className={styles.value}>{formatDurationMinutes(total)}</span>
               <div className={styles.track}>
                 <div className={styles.stack} style={{ height: `${(total / max) * 100}%` }}>
                   {orderedSegments.map((segment) => {

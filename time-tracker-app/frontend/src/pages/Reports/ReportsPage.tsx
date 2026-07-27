@@ -4,7 +4,6 @@ import { getSettings } from "../../api/settings";
 import type { ExportFormat, ReportPeriod } from "../../api/types";
 import { useReportSummary } from "../../hooks/useReportSummary";
 import { SegmentedBreakdown } from "../../components/SegmentedBreakdown/SegmentedBreakdown";
-import { MiniBarChart } from "../../components/MiniBarChart/MiniBarChart";
 import { barsFromDays, barsFromWeeks } from "../../components/MiniBarChart/bars";
 import {
   StackedCategoryChart,
@@ -60,8 +59,8 @@ interface ZeroFilledDay {
 }
 
 /** Zero-fills every day in `[startDate, endDate]` (inclusive) with a report day's aggregates,
- * since `by_day` from the backend omits days with no entries but `MiniBarChart` (and the
- * category/count charts, which share its bucket list) expect a contiguous chronological run. */
+ * since `by_day` from the backend omits days with no entries but the category/count charts (and
+ * `barsFromDays`, which builds their shared labels) expect a contiguous chronological run. */
 function zeroFillDays(
   startDate: string,
   endDate: string,
@@ -163,8 +162,8 @@ export function ReportsPage(): ReactElement {
   // Shared bucket list for `StackedCategoryChart`/`CountLineChart`, built once so both charts stay
   // in lockstep on bucket order and x-labels (week reports bucket by day; month/quarter bucket by
   // week, mirroring `chartBars`/`bucketedByWeek` above). Labels/titles are derived the same way
-  // `MiniBarChart`'s bars are (`CW NN` + `formatWeekRangeShort`) so all three charts read as one
-  // consistent x-axis.
+  // `MiniBarChart`'s bars are (`CW NN` + `formatWeekRangeShort`, via `barsFromDays`/`barsFromWeeks`)
+  // so both remaining charts read as one consistent x-axis.
   const categoryLegend = useMemo<StackedCategoryLegendItem[]>(() => {
     if (!summary) return [];
     return summary.by_category.map((row) => ({
@@ -337,12 +336,6 @@ export function ReportsPage(): ReactElement {
               <SegmentedBreakdown title="By tag" segments={tagBreakdown} variant="tag" visibleLimit={5} />
             </div>
           </div>
-
-          {chartBars.length > 0 && (
-            <div className={styles.chartCard}>
-              <MiniBarChart bars={chartBars} labelEveryBar={bucketedByWeek} />
-            </div>
-          )}
 
           {sharedBuckets.stacked.length > 0 && (
             <div className={styles.chartCard}>

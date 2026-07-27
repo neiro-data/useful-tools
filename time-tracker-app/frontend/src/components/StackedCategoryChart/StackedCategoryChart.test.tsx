@@ -43,6 +43,24 @@ describe("StackedCategoryChart", () => {
     expect(flexGrows).toEqual([30, 90]);
   });
 
+  it("renders the bucket's total duration as a label above the column (absorbed from MiniBarChart)", () => {
+    const buckets: StackedCategoryBucket[] = [
+      {
+        key: "day-1",
+        label: "Mon",
+        segments: [
+          { categoryId: 1, minutes: 30 },
+          { categoryId: 2, minutes: 90 },
+        ],
+      },
+    ];
+
+    render(<StackedCategoryChart buckets={buckets} legend={legend} />);
+
+    const value = document.querySelector(`.${styles.value}`);
+    expect(value?.textContent).toBe("2h 00m");
+  });
+
   it("falls back to the slate token for an uncategorized segment", () => {
     const buckets: StackedCategoryBucket[] = [
       { key: "day-1", label: "Mon", segments: [{ categoryId: null, minutes: 45 }] },
@@ -63,6 +81,37 @@ describe("StackedCategoryChart", () => {
 
     const segment = document.querySelector(`.${styles.segment}`) as HTMLElement;
     expect(segment.title).toBe("Deep Work: 1h 30m (100%)");
+  });
+
+  it("renders a zero total ('0m') and no segments for a bucket with no logged time", () => {
+    const buckets: StackedCategoryBucket[] = [{ key: "day-1", label: "Mon", segments: [] }];
+
+    render(<StackedCategoryChart buckets={buckets} legend={legend} />);
+
+    const value = document.querySelector(`.${styles.value}`);
+    expect(value?.textContent).toBe("0m");
+    expect(document.querySelectorAll(`.${styles.segment}`)).toHaveLength(0);
+  });
+
+  it("gives `.columns` no flex gap, so each of the N `.column`s occupies exactly 1/N of the width", () => {
+    const buckets: StackedCategoryBucket[] = [
+      { key: "day-1", label: "Mon", segments: [{ categoryId: 1, minutes: 30 }] },
+      { key: "day-2", label: "Tue", segments: [{ categoryId: 1, minutes: 30 }] },
+      { key: "day-3", label: "Wed", segments: [{ categoryId: 1, minutes: 30 }] },
+      { key: "day-4", label: "Thu", segments: [{ categoryId: 1, minutes: 30 }] },
+    ];
+
+    render(<StackedCategoryChart buckets={buckets} legend={legend} />);
+
+    const columnsEl = document.querySelector(`.${styles.columns}`) as HTMLElement;
+    // No gap here matters because CountLineChart centres point i at ((i + 0.5) / N) * 100% of the
+    // plot width; a gap on `.columns` would shrink/offset each `flex: 1` column and break that
+    // alignment between the two charts' buckets. See the CSS comment above `.columns`.
+    // jsdom's `getComputedStyle` doesn't resolve inherited/initial values, so an unset `gap`
+    // computes to "" rather than "0px" — contrast with `.legend`/`.chart` (both set `gap` in this
+    // module's CSS), which do resolve to a token value.
+    expect(getComputedStyle(columnsEl).gap).toBe("");
+    expect(document.querySelectorAll(`.${styles.column}`)).toHaveLength(4);
   });
 
   it("renders no columns/segments for an empty period", () => {
