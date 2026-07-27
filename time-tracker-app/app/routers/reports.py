@@ -282,7 +282,7 @@ def get_reports_summary(
     )
 
 
-def _build_narrative(summary: ReportSummaryResponse) -> tuple[str, list[str]]:
+def build_narrative(summary: ReportSummaryResponse) -> tuple[str, list[str]]:
     """Derive a rule-based, plain-language narrative (and its ordered factual ``highlights``)
     purely from ``summary``'s already-computed aggregates. No I/O, no external calls."""
     period_label = summary.period.value
@@ -386,6 +386,10 @@ def _build_narrative(summary: ReportSummaryResponse) -> tuple[str, list[str]]:
     return narrative, highlights
 
 
+_build_narrative = build_narrative
+"""Backwards-compatible alias for existing tests/imports that reference the private name."""
+
+
 @router.get("/narrative", response_model=ReportNarrativeResponse)
 def get_reports_narrative(
     db: DbDep,
@@ -399,7 +403,7 @@ def get_reports_narrative(
     number in the narrative from the resulting ``ReportSummaryResponse`` in pure Python.
     """
     summary = get_reports_summary(db, period, date)
-    narrative, highlights = _build_narrative(summary)
+    narrative, highlights = build_narrative(summary)
 
     return ReportNarrativeResponse(
         period=summary.period,
