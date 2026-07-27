@@ -891,3 +891,16 @@ each serves.
   Orchestrator fixed the review's overflow finding (ellipsized `.value` + total in column tooltip).
 - Gates re-run by orchestrator: eslint clean, tsc --noEmit clean, vitest 190 passed. Backend untouched.
 - Not verified: no in-browser visual check (Chrome extension declined); dev stack left running.
+
+## feat/exports-ui-design-parity — PR #26
+
+- Goal: make the Reports-tab exports look like the app UI. CSV + DB backup explicitly out of scope.
+- Flagged upfront: Markdown has no styling layer, so visual parity is impossible there. User chose
+  content parity only (narrative, UI section order, breakdown sections, hex color column).
+- Pipeline: architect-orchestrator planned -> python-pro implemented -> test-automator (+15 tests)
+  -> code-reviewer (REQUEST CHANGES: `_pdf_card` drew negative-height rects across page breaks)
+  -> python-pro fixed (skip border for page-spanning cards) + 2 parity nits.
+- New `app/report_theme.py`: design tokens as literal Python constants + a drift guard test that
+  reads design/tokens.css. Deliberately NOT parsing the CSS at runtime (design/ is outside the pkg).
+- Gates re-run by orchestrator: ruff format+check clean, mypy 22 files clean, pytest 226 passed.
+- Not verified: no visual eyeball of the rendered PDF/HTML output.
