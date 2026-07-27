@@ -847,3 +847,33 @@ each serves.
   Week page ignores `week_starts_on`. With `week_starts_on: "sunday"` the Month page chart
   (client-side Monday) and the Reports month chart (backend, honors setting) now bucket the same data
   differently — visible inconsistency, flagged to the user for a follow-up branch.
+
+## Branch: feat/entry-validation-charts-tags (6 user-reported improvements/bugs)
+
+- Pipeline: architect-orchestrator (plan, 84.9k) -> frontend-developer (implement, 145k + resumed
+  after an API error mid-run) -> test-automator (coverage, 142.6k) -> code-reviewer (78.1k).
+  Orchestrator did the small edits itself (CW helpers, timeRangeError wiring, review fixes).
+- Shipped: (1) end<start blocked in ManualEntryForm + TimerWidget manual mode (the latter had NO
+  check at all) via new `utils/timeRange.ts`; (2) Reports gained a stacked hours-by-category chart +
+  an entry-count line chart, backed by a new additive `ReportBucketCategorySplit` nested on
+  by_day/by_week (exports deliberately untouched); (3) start/end datetime now editable in EntryRow's
+  inline edit, threaded through Today/Week/Month; (4) TagEditor recents + browse-all dropdown, plus
+  two carry-over leaks closed (ManualEntryForm never reset; TagEditor's internal draft survived a
+  cleared value -> formKey remount); (5) `(CW NN)` on the Week heading, zero-padded; (6) Quarter
+  report bars labeled `CW NN` under EVERY bar (wide date ranges were being thinned), range moved to
+  the tooltip.
+- Bugs found en route, not in the original list: WeekPage/MonthPage called updateEntry WITHOUT
+  tag_ids, so tag edits on those pages silently never persisted; date pickers were prefilled via
+  `.toISOString().slice(0,16)`, i.e. UTC wall time in a local-time picker (off by the UTC offset);
+  the first CW implementation was off by one under `week_starts_on: "sunday"` (ISO weeks are
+  Monday-based) -> now anchors on the bucket's Thursday.
+- Review outcome: no defects in the high-risk areas (end_ts:null hazard, backend aggregation, schema
+  lockstep, dark mode, CVD secondary encoding). Two findings fixed by the orchestrator: TagEditor
+  lacked aria-activedescendant + had bare <li> between listbox and option; no direct tests for the
+  week-number logic -> added `utils/dateRange.test.ts` (year boundaries, 53-week years, DST).
+- Gates (re-verified by orchestrator, not taken on report — test-automator reported ruff format
+  clean when tests/test_reports.py was not): 177 pytest, 180 vitest, ruff check + format, mypy,
+  eslint, tsc all clean. Test counts: backend 172->177, frontend 124->180.
+- Carried forward: `getWeekRange` still hardcodes Monday (pre-existing, still out of scope). The
+  category palette's adjacent hues are not all CVD-separable, so the stacked chart leans on legend +
+  tooltips + 2px surface gaps as required secondary encoding.

@@ -1,19 +1,16 @@
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MonthPage } from "./MonthPage";
+import { WeekPage } from "./WeekPage";
 import { usePeriodEntries } from "../../hooks/usePeriodEntries";
 import { useRunningTimer } from "../../hooks/useRunningTimer";
 import { listCategories } from "../../api/categories";
 import { listTags } from "../../api/tags";
 import { updateEntry } from "../../api/entries";
-import styles from "../../components/MiniBarChart/MiniBarChart.module.css";
-import monthStyles from "./MonthPage.module.css";
 import type { CategoryRead, EntryRead } from "../../api/types";
 
 /**
- * `MonthPage` renders whatever `usePeriodEntries`/`useRunningTimer` return and aggregates
- * client-side — so the hooks (and the categories/tags list calls) are mocked directly, mirroring
- * `ReportsPage.test.tsx`'s convention of mocking the data-fetching layer rather than the network.
+ * Mirrors `MonthPage.test.tsx`'s convention: mock the data-fetching hooks/calls directly rather
+ * than the network, since `WeekPage` renders whatever they return and aggregates client-side.
  */
 vi.mock("../../hooks/usePeriodEntries", () => ({
   usePeriodEntries: vi.fn(),
@@ -41,12 +38,12 @@ function makeEntry(overrides: Partial<EntryRead>): EntryRead {
     notes: null,
     category: deepWork,
     tags: [],
-    start_ts: "2026-06-01T09:00:00+00:00",
-    end_ts: "2026-06-01T10:00:00+00:00",
+    start_ts: "2026-06-15T09:00:00+00:00",
+    end_ts: "2026-06-15T10:00:00+00:00",
     duration_minutes: 60,
     entry_mode: "manual",
-    created_at: "2026-06-01T09:00:00+00:00",
-    updated_at: "2026-06-01T09:00:00+00:00",
+    created_at: "2026-06-15T09:00:00+00:00",
+    updated_at: "2026-06-15T09:00:00+00:00",
     ...overrides,
   };
 }
@@ -68,10 +65,8 @@ function mockHooks(entries: EntryRead[]): void {
   vi.mocked(listTags).mockResolvedValue({ items: [], total: 0 });
 }
 
-describe("MonthPage", () => {
+describe("WeekPage", () => {
   beforeEach(() => {
-    // Fix "today" to a stable date inside June 2026 so `getMonthRange(new Date(), 0)` resolves
-    // deterministically without paging.
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2026, 5, 15, 12, 0, 0));
   });
@@ -81,65 +76,16 @@ describe("MonthPage", () => {
     vi.restoreAllMocks();
   });
 
-  it("renders a weekly mini bar chart (bucketed by week, not by day)", () => {
-    const entries = [
-      makeEntry({ id: 1, start_ts: "2026-06-01T09:00:00+00:00", duration_minutes: 60 }),
-      makeEntry({ id: 2, start_ts: "2026-06-10T09:00:00+00:00", duration_minutes: 30 }),
-      makeEntry({ id: 3, start_ts: "2026-06-30T09:00:00+00:00", duration_minutes: 45 }),
-    ];
-    mockHooks(entries);
-
-    const { container } = render(<MonthPage />);
-
-    const chart = container.querySelector(`.${styles.chart}`);
-    expect(chart).toBeInTheDocument();
-
-    const columns = chart?.querySelectorAll(`.${styles.column}`) ?? [];
-    // June 2026 has 30 days but only a handful of Monday-start weeks — bucketed by week, not day.
-    expect(columns.length).toBeGreaterThan(0);
-    expect(columns.length).toBeLessThan(10);
-
-    // Weekly labels look like calendar-week labels (e.g. "CW 23"), not single weekday names.
-    const labels = [...(chart?.querySelectorAll(`.${styles.label}`) ?? [])].map((el) => el.textContent);
-    for (const label of labels) {
-      expect(label).toMatch(/^CW \d{2}$/);
-    }
-    for (const weekday of ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]) {
-      expect(screen.queryByText(weekday)).not.toBeInTheDocument();
-    }
-  });
-
-  it("sums the chart's bucket minutes to the month's total", () => {
-    const entries = [
-      makeEntry({ id: 1, start_ts: "2026-06-01T09:00:00+00:00", duration_minutes: 60 }),
-      makeEntry({ id: 2, start_ts: "2026-06-10T09:00:00+00:00", duration_minutes: 30 }),
-    ];
-    mockHooks(entries);
-
-    const { container } = render(<MonthPage />);
-
-    const totalValue = container.querySelector(`.${monthStyles.totalValue}`);
-    expect(totalValue?.textContent).toBe("1h 30m");
-  });
-
   it("regression: forwards tag_ids and start_ts to updateEntry when saving an edited entry", async () => {
     // Previously `handleSaveEntry` called `updateEntry` WITHOUT `tag_ids`/`start_ts`, so tag edits
-    // silently never persisted. This pins the fix.
+    // made on Week silently never persisted. This pins the fix.
     const focusTag = { id: 5, name: "focus", is_active: true };
-    // Dated on the mocked "today" (2026-06-15) so its DayGroup is expanded by default.
-    const entry = makeEntry({
-      id: 42,
-      start_ts: "2026-06-15T09:00:00+00:00",
-      end_ts: "2026-06-15T10:00:00+00:00",
-      tags: [],
-    });
+    const entry = makeEntry({ id: 42, tags: [] });
     mockHooks([entry]);
     vi.mocked(listTags).mockResolvedValue({ items: [focusTag], total: 1 });
     vi.mocked(updateEntry).mockResolvedValue(entry);
 
-    render(<MonthPage />);
-    // Let the async `listTags()` effect resolve so `knownTags` includes the "focus" tag before
-    // we start typing it into `TagEditor`.
+    render(<WeekPage />);
     await act(async () => {
       await Promise.resolve();
     });

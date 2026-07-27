@@ -14,6 +14,8 @@ import { Skeleton } from "../../components/Skeleton/Skeleton";
 import { getMonthRange, enumerateDays, formatMonthHeading, isToday } from "../../utils/dateRange";
 import { breakdownByCategory, breakdownByTag, groupByDay, groupByWeek, totalMinutes } from "../../utils/aggregate";
 import { formatDurationMinutes } from "../../utils/duration";
+import { resolveTagIds } from "../../utils/resolveTagIds";
+import { recentTagsFromEntries } from "../../utils/recentTags";
 import type { EntryRowSaveValues } from "../../components/EntryRow/EntryRow";
 import styles from "./MonthPage.module.css";
 
@@ -36,7 +38,7 @@ export function MonthPage(): ReactElement {
     listCategories()
       .then((response) => setCategories(response.items))
       .catch(() => undefined);
-    listTags()
+    listTags({ limit: 200 })
       .then((response) => setTags(response.items))
       .catch(() => undefined);
   }, []);
@@ -74,9 +76,23 @@ export function MonthPage(): ReactElement {
 
   // Newest day first, mirroring Week's reverse-chronological entry ordering.
   const orderedDays = useMemo(() => [...days].reverse(), [days]);
+  // Month has no `/today`-style server-supplied recent-tags list either — same client-side
+  // derivation as Week (see `recentTagsFromEntries`'s doc comment).
+  const recentTags = useMemo(() => recentTagsFromEntries(entries), [entries]);
 
   async function handleSaveEntry(entryId: number, values: EntryRowSaveValues): Promise<void> {
-    await updateEntry(entryId, { title: values.title, category_id: values.category.id, notes: values.notes });
+    const { ids, created } = await resolveTagIds(values.tagNames, tags);
+    if (created.length > 0) setTags((prev) => [...prev, ...created]);
+    await updateEntry(entryId, {
+      title: values.title,
+      category_id: values.category.id,
+      tag_ids: ids,
+      notes: values.notes,
+      start_ts: values.startTs,
+      // CRITICAL: only send end_ts when set — an explicit `end_ts: null` clears an
+      // already-completed entry's end time (see `EntryRowSaveValues.endTs`'s doc comment).
+      ...(values.endTs !== null && { end_ts: values.endTs }),
+    });
     await reload();
   }
 
@@ -143,6 +159,7 @@ export function MonthPage(): ReactElement {
                   .sort((a, b) => b.start_ts.localeCompare(a.start_ts))}
                 categories={categories}
                 knownTags={tags}
+                recentTags={recentTags}
                 defaultExpanded={isToday(isoDate)}
                 onSaveEntry={handleSaveEntry}
                 onDeleteEntry={handleDeleteEntry}

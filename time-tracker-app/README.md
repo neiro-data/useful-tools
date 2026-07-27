@@ -11,9 +11,13 @@ cloud dependency — all data lives in a local SQLite file.
 ## Features
 
 - **Time tracking** — log entries against categories and tags; a live timer for the current task.
-- **Today / Week / Month** — review tracked time across day, week, and month views.
+- **Today / Week / Month** — review tracked time across day, week, and month views; the Week header
+  shows the ISO calendar week (`CW 01`–`CW 53`). Entries can be edited inline, including their
+  start/end times.
 - **Reports** — period summaries (week/month/quarter) with per-category and per-tag breakdowns,
-  daily bars, zero-filled weekly bars, and a rule-based narrative summary of the period.
+  daily bars, zero-filled weekly bars, a stacked hours-by-category chart, an entry-count line chart,
+  and a rule-based narrative summary of the period. Month/quarter bars are labelled by calendar
+  week (`CW 27`), with the full date range on hover.
 - **Exports** — download your data as an Outlook-friendly HTML report (with bar-chart graphics),
   a Markdown report, a PDF report, a CSV, or a raw SQLite database backup.
 - **Settings** — configure timezone (drives day boundaries), week start, default entry mode, and

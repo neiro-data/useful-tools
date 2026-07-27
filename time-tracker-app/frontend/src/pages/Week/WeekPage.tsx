@@ -11,9 +11,17 @@ import { MiniBarChart } from "../../components/MiniBarChart/MiniBarChart";
 import { barsFromDays } from "../../components/MiniBarChart/bars";
 import { TimerBanner } from "../../components/TimerBanner/TimerBanner";
 import { Skeleton } from "../../components/Skeleton/Skeleton";
-import { getWeekRange, enumerateDays, formatWeekHeading, isToday } from "../../utils/dateRange";
+import {
+  getWeekRange,
+  enumerateDays,
+  formatCalendarWeek,
+  formatWeekHeading,
+  isToday,
+} from "../../utils/dateRange";
 import { breakdownByCategory, breakdownByTag, groupByDay, totalMinutes } from "../../utils/aggregate";
 import { formatDurationMinutes } from "../../utils/duration";
+import { resolveTagIds } from "../../utils/resolveTagIds";
+import { recentTagsFromEntries } from "../../utils/recentTags";
 import type { EntryRowSaveValues } from "../../components/EntryRow/EntryRow";
 import styles from "./WeekPage.module.css";
 
@@ -30,7 +38,7 @@ export function WeekPage(): ReactElement {
     listCategories()
       .then((response) => setCategories(response.items))
       .catch(() => undefined);
-    listTags()
+    listTags({ limit: 200 })
       .then((response) => setTags(response.items))
       .catch(() => undefined);
   }, []);
@@ -57,9 +65,23 @@ export function WeekPage(): ReactElement {
   const chartBars = barsFromDays(
     days.map((isoDate) => ({ isoDate, minutes: totalMinutes(grouped.get(isoDate) ?? []) })),
   );
+  // Week has no `/today`-style server-supplied recent-tags list, so it's derived client-side from
+  // the entries already loaded for this week (see `recentTagsFromEntries`'s doc comment).
+  const recentTags = useMemo(() => recentTagsFromEntries(entries), [entries]);
 
   async function handleSaveEntry(entryId: number, values: EntryRowSaveValues): Promise<void> {
-    await updateEntry(entryId, { title: values.title, category_id: values.category.id, notes: values.notes });
+    const { ids, created } = await resolveTagIds(values.tagNames, tags);
+    if (created.length > 0) setTags((prev) => [...prev, ...created]);
+    await updateEntry(entryId, {
+      title: values.title,
+      category_id: values.category.id,
+      tag_ids: ids,
+      notes: values.notes,
+      start_ts: values.startTs,
+      // CRITICAL: only send end_ts when set — an explicit `end_ts: null` clears an
+      // already-completed entry's end time (see `EntryRowSaveValues.endTs`'s doc comment).
+      ...(values.endTs !== null && { end_ts: values.endTs }),
+    });
     await reload();
   }
 
@@ -73,7 +95,10 @@ export function WeekPage(): ReactElement {
       {runningTimer && <TimerBanner runningTimer={runningTimer} onStop={() => void stopRunningTimer()} />}
 
       <header className={styles.header}>
-        <h1 className={styles.title}>Week of {formatWeekHeading(range)}</h1>
+        <h1 className={styles.title}>
+          Week of {formatWeekHeading(range)}{" "}
+          <span className={styles.calendarWeek}>({formatCalendarWeek(range.start)})</span>
+        </h1>
         <div className={styles.nav}>
           <button type="button" aria-label="Previous week" onClick={() => setWeekOffset((o) => o - 1)}>
             ‹
@@ -126,6 +151,7 @@ export function WeekPage(): ReactElement {
                   .sort((a, b) => b.start_ts.localeCompare(a.start_ts))}
                 categories={categories}
                 knownTags={tags}
+                recentTags={recentTags}
                 defaultExpanded={isToday(isoDate) || (grouped.get(isoDate)?.length ?? 0) > 0}
                 onSaveEntry={handleSaveEntry}
                 onDeleteEntry={handleDeleteEntry}

@@ -6,9 +6,16 @@ import { useReportSummary } from "../../hooks/useReportSummary";
 import { SegmentedBreakdown } from "../../components/SegmentedBreakdown/SegmentedBreakdown";
 import { MiniBarChart } from "../../components/MiniBarChart/MiniBarChart";
 import { barsFromDays, barsFromWeeks } from "../../components/MiniBarChart/bars";
+import {
+  StackedCategoryChart,
+  type StackedCategoryBucket,
+  type StackedCategoryLegendItem,
+} from "../../components/StackedCategoryChart/StackedCategoryChart";
+import { CountLineChart, type CountLineChartPoint } from "../../components/CountLineChart/CountLineChart";
 import { Skeleton } from "../../components/Skeleton/Skeleton";
 import { formatDurationMinutes } from "../../utils/duration";
 import type { BreakdownSegment } from "../../utils/aggregate";
+import type { ReportBucketCategorySplit } from "../../api/types";
 import styles from "./ReportsPage.module.css";
 
 const PERIOD_OPTIONS: { value: ReportPeriod; label: string }[] = [
@@ -45,16 +52,28 @@ function stepAnchor(anchor: Date, period: ReportPeriod, direction: -1 | 1): Date
   return new Date(year, quarterStartMonth + 3 * direction, 1);
 }
 
-/** Zero-fills every day in `[startDate, endDate]` (inclusive) with a report day's minutes, since
- * `by_day` from the backend omits days with no entries but `MiniBarChart` expects a contiguous
- * chronological run. */
+interface ZeroFilledDay {
+  isoDate: string;
+  minutes: number;
+  entry_count: number;
+  by_category: ReportBucketCategorySplit[];
+}
+
+/** Zero-fills every day in `[startDate, endDate]` (inclusive) with a report day's aggregates,
+ * since `by_day` from the backend omits days with no entries but `MiniBarChart` (and the
+ * category/count charts, which share its bucket list) expect a contiguous chronological run. */
 function zeroFillDays(
   startDate: string,
   endDate: string,
-  byDay: { date: string; total_minutes: number }[],
-): { isoDate: string; minutes: number }[] {
-  const minutesByDate = new Map(byDay.map((day) => [day.date, day.total_minutes]));
-  const days: { isoDate: string; minutes: number }[] = [];
+  byDay: {
+    date: string;
+    total_minutes: number;
+    entry_count: number;
+    by_category: ReportBucketCategorySplit[];
+  }[],
+): ZeroFilledDay[] {
+  const rowByDate = new Map(byDay.map((day) => [day.date, day]));
+  const days: ZeroFilledDay[] = [];
   const cursor = new Date(`${startDate}T00:00:00`);
   const end = new Date(`${endDate}T00:00:00`);
   while (cursor <= end) {
@@ -62,7 +81,13 @@ function zeroFillDays(
     const month = String(cursor.getMonth() + 1).padStart(2, "0");
     const day = String(cursor.getDate()).padStart(2, "0");
     const isoDate = `${year}-${month}-${day}`;
-    days.push({ isoDate, minutes: minutesByDate.get(isoDate) ?? 0 });
+    const row = rowByDate.get(isoDate);
+    days.push({
+      isoDate,
+      minutes: row?.total_minutes ?? 0,
+      entry_count: row?.entry_count ?? 0,
+      by_category: row?.by_category ?? [],
+    });
     cursor.setDate(cursor.getDate() + 1);
   }
   return days;
@@ -123,6 +148,10 @@ export function ReportsPage(): ReactElement {
     }));
   }, [summary]);
 
+  // Week reports bucket by day; Month/Quarter bucket by week (by_day is too sparse/wide to chart
+  // at that granularity — same rationale as the exports, see `app/routers/exports.py`).
+  const bucketedByWeek = summary !== null && summary.period !== "week";
+
   const chartBars = useMemo(() => {
     if (!summary) return [];
     if (summary.period === "week") {
@@ -130,6 +159,52 @@ export function ReportsPage(): ReactElement {
     }
     return barsFromWeeks(summary.by_week);
   }, [summary]);
+
+  // Shared bucket list for `StackedCategoryChart`/`CountLineChart`, built once so both charts stay
+  // in lockstep on bucket order and x-labels (week reports bucket by day; month/quarter bucket by
+  // week, mirroring `chartBars`/`bucketedByWeek` above). Labels/titles are derived the same way
+  // `MiniBarChart`'s bars are (`CW NN` + `formatWeekRangeShort`) so all three charts read as one
+  // consistent x-axis.
+  const categoryLegend = useMemo<StackedCategoryLegendItem[]>(() => {
+    if (!summary) return [];
+    return summary.by_category.map((row) => ({
+      categoryId: row.category?.id ?? null,
+      name: row.category ? row.category.name : "Uncategorized",
+      color: row.category?.color ?? null,
+    }));
+  }, [summary]);
+
+  const sharedBuckets = useMemo<{ stacked: StackedCategoryBucket[]; counts: CountLineChartPoint[] }>(() => {
+    if (!summary) return { stacked: [], counts: [] };
+
+    // Reuses `barsFromDays`/`barsFromWeeks` for labels/titles (same `CW NN` + date-range-title
+    // convention as `MiniBarChart`'s own bars) rather than re-deriving them, zipped by index with
+    // each row's `entry_count`/`by_category` — the two arrays are built from the same source list
+    // in the same order, so they line up 1:1.
+    const rows: { entry_count: number; by_category: ReportBucketCategorySplit[] }[] =
+      summary.period === "week"
+        ? zeroFillDays(summary.start_date, summary.end_date, summary.by_day)
+        : summary.by_week;
+
+    const stacked: StackedCategoryBucket[] = chartBars.map((bar, index) => ({
+      key: bar.key,
+      label: bar.label,
+      ...(bar.title !== undefined && { title: bar.title }),
+      segments: (rows[index]?.by_category ?? []).map((split) => ({
+        categoryId: split.category_id,
+        minutes: split.total_minutes,
+      })),
+    }));
+
+    const counts: CountLineChartPoint[] = chartBars.map((bar, index) => ({
+      key: bar.key,
+      label: bar.label,
+      ...(bar.title !== undefined && { title: bar.title }),
+      count: rows[index]?.entry_count ?? 0,
+    }));
+
+    return { stacked, counts };
+  }, [summary, chartBars]);
 
   function handlePagePeriod(direction: -1 | 1): void {
     const anchor = dateAnchor ? new Date(`${dateAnchor}T00:00:00`) : new Date();
@@ -265,7 +340,21 @@ export function ReportsPage(): ReactElement {
 
           {chartBars.length > 0 && (
             <div className={styles.chartCard}>
-              <MiniBarChart bars={chartBars} />
+              <MiniBarChart bars={chartBars} labelEveryBar={bucketedByWeek} />
+            </div>
+          )}
+
+          {sharedBuckets.stacked.length > 0 && (
+            <div className={styles.chartCard}>
+              <h2 className={styles.narrativeHeading}>Hours by category</h2>
+              <StackedCategoryChart buckets={sharedBuckets.stacked} legend={categoryLegend} />
+            </div>
+          )}
+
+          {sharedBuckets.counts.length > 0 && (
+            <div className={styles.chartCard}>
+              <h2 className={styles.narrativeHeading}>Entries per {bucketedByWeek ? "week" : "day"}</h2>
+              <CountLineChart points={sharedBuckets.counts} />
             </div>
           )}
 

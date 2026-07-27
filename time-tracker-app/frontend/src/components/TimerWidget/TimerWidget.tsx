@@ -6,6 +6,7 @@ import { RecentChipsRail } from "../RecentChipsRail/RecentChipsRail";
 import { DateTimePicker } from "../DateTimePicker/DateTimePicker";
 import { useLiveTimer } from "../../hooks/useLiveTimer";
 import { formatElapsedSeconds } from "../../utils/duration";
+import { timeRangeError, toLocalDateTimeInput } from "../../utils/timeRange";
 import styles from "./TimerWidget.module.css";
 
 export interface StartPayload {
@@ -67,7 +68,11 @@ export function TimerWidget({
   const [notes, setNotes] = useState("");
   const [manualMode, setManualMode] = useState(false);
   const [manualStart, setManualStart] = useState(() => defaultManualStart());
-  const [manualEnd, setManualEnd] = useState(() => new Date().toISOString().slice(0, 16));
+  const [manualEnd, setManualEnd] = useState(() => toLocalDateTimeInput(new Date()));
+  // Bumped after every successful start/manual-save so `TagEditor` remounts with a clean internal
+  // draft — `tagNames` alone resetting to `[]` doesn't clear its own in-progress input text (see
+  // `ManualEntryForm`'s `formKey` for the same pattern).
+  const [formKey, setFormKey] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
 
   const elapsed = useLiveTimer(runningEntry?.start_ts);
@@ -103,6 +108,9 @@ export function TimerWidget({
   }
 
   const canStart = title.trim().length > 0 && category !== null;
+  // Only meaningful in manual mode — starting a timer has no end time to cross over.
+  const manualRangeError = manualMode ? timeRangeError(manualStart, manualEnd) : null;
+  const canSaveManual = canStart && manualRangeError === null;
 
   async function handleStart(): Promise<void> {
     if (title.trim().length === 0 || category === null) return;
@@ -111,10 +119,12 @@ export function TimerWidget({
     setCategory(null);
     setTagNames([]);
     setNotes("");
+    setFormKey((key) => key + 1);
   }
 
   async function handleManualSave(): Promise<void> {
     if (title.trim().length === 0 || category === null) return;
+    if (timeRangeError(manualStart, manualEnd) !== null) return;
     await onManualAdd({
       title: title.trim(),
       category,
@@ -128,6 +138,7 @@ export function TimerWidget({
     setTagNames([]);
     setNotes("");
     setManualMode(false);
+    setFormKey((key) => key + 1);
   }
 
   if (runningEntry) {
@@ -235,7 +246,7 @@ export function TimerWidget({
           <button
             type="button"
             className={styles.startButton}
-            disabled={!canStart}
+            disabled={!canSaveManual}
             onClick={() => void handleManualSave()}
           >
             Save
@@ -252,18 +263,31 @@ export function TimerWidget({
       )}
 
       {manualMode && (
-        <div className={styles.manualTimes}>
-          <DateTimePicker value={manualStart} onChange={setManualStart} label="Start" />
-          <DateTimePicker value={manualEnd} onChange={setManualEnd} label="End" />
-          <button type="button" className={styles.manualLink} onClick={() => setManualMode(false)}>
-            Cancel
-          </button>
-        </div>
+        <>
+          <div className={styles.manualTimes}>
+            <DateTimePicker value={manualStart} onChange={setManualStart} label="Start" />
+            <DateTimePicker value={manualEnd} onChange={setManualEnd} label="End" />
+            <button type="button" className={styles.manualLink} onClick={() => setManualMode(false)}>
+              Cancel
+            </button>
+          </div>
+          {manualRangeError && (
+            <p className={styles.error} role="alert">
+              {manualRangeError}
+            </p>
+          )}
+        </>
       )}
 
       <div className={styles.idleMeta}>
         <CategoryPicker categories={categories} value={category} onChange={setCategory} required />
-        <TagEditor value={tagNames} onChange={setTagNames} knownTags={knownTags} />
+        <TagEditor
+          key={formKey}
+          value={tagNames}
+          onChange={setTagNames}
+          knownTags={knownTags}
+          recentTags={recentTags}
+        />
       </div>
 
       <input
@@ -291,5 +315,5 @@ export function TimerWidget({
 function defaultManualStart(): string {
   const d = new Date();
   d.setHours(d.getHours() - 1);
-  return d.toISOString().slice(0, 16);
+  return toLocalDateTimeInput(d);
 }

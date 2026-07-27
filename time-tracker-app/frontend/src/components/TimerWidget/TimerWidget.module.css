@@ -162,6 +162,12 @@
   color: var(--color-text-muted);
 }
 
+.error {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-sm);
+  color: var(--color-danger);
+}
+
 .notesInput {
   width: 100%;
   height: 32px;

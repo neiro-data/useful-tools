@@ -155,10 +155,17 @@ export interface ReportTagBreakdown {
   entry_count: number;
 }
 
+export interface ReportBucketCategorySplit {
+  category_id: number | null;
+  total_minutes: number;
+  entry_count: number;
+}
+
 export interface ReportDayBreakdown {
   date: string;
   total_minutes: number;
   entry_count: number;
+  by_category: ReportBucketCategorySplit[];
 }
 
 export interface ReportWeekBreakdown {
@@ -166,6 +173,7 @@ export interface ReportWeekBreakdown {
   week_end: string;
   total_minutes: number;
   entry_count: number;
+  by_category: ReportBucketCategorySplit[];
 }
 
 export interface ReportSummaryResponse {

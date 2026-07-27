@@ -415,17 +415,42 @@ class ReportTagBreakdown(BaseModel):
     entry_count: int
 
 
+class ReportBucketCategorySplit(BaseModel):
+    """One category's contribution to a single :class:`ReportDayBreakdown`/
+    :class:`ReportWeekBreakdown` bucket. ``category_id: null`` groups that bucket's uncategorized
+    entries. Sorted by ``total_minutes`` descending; ``sum(total_minutes for split in
+    by_category) == <bucket>.total_minutes`` always holds."""
+
+    model_config = ConfigDict(
+        json_schema_extra={"example": {"category_id": 1, "total_minutes": 60, "entry_count": 1}}
+    )
+
+    category_id: int | None
+    total_minutes: int
+    entry_count: int
+
+
 class ReportDayBreakdown(BaseModel):
     """One row of :attr:`ReportSummaryResponse.by_day`. Only days with at least one completed
     entry are included (empty days in the period are omitted, not zero-filled)."""
 
     model_config = ConfigDict(
-        json_schema_extra={"example": {"date": "2026-07-13", "total_minutes": 90, "entry_count": 1}}
+        json_schema_extra={
+            "example": {
+                "date": "2026-07-13",
+                "total_minutes": 90,
+                "entry_count": 1,
+                "by_category": [{"category_id": 1, "total_minutes": 90, "entry_count": 1}],
+            }
+        }
     )
 
     date: date
     total_minutes: int
     entry_count: int
+    by_category: list[ReportBucketCategorySplit] = Field(
+        default_factory=list, description="This day's total_minutes/entry_count split by category."
+    )
 
 
 class ReportWeekBreakdown(BaseModel):
@@ -448,6 +473,7 @@ class ReportWeekBreakdown(BaseModel):
                 "week_end": "2026-07-19",
                 "total_minutes": 270,
                 "entry_count": 4,
+                "by_category": [{"category_id": 1, "total_minutes": 270, "entry_count": 4}],
             }
         }
     )
@@ -460,6 +486,11 @@ class ReportWeekBreakdown(BaseModel):
     )
     total_minutes: int
     entry_count: int
+    by_category: list[ReportBucketCategorySplit] = Field(
+        default_factory=list,
+        description="This week's total_minutes/entry_count split by category. Always `[]` for a"
+        " zero-filled week with no entries.",
+    )
 
 
 class ReportSummaryResponse(BaseModel):

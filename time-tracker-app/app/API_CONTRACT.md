@@ -392,7 +392,10 @@ nearest whole minute) — never trusted from the client.
   - `by_day: ReportDayBreakdown[]` — one row per **local day that has at least one completed
     entry** within the period, ascending by date. Days with zero entries are omitted entirely
     (not zero-filled) — the frontend is responsible for filling gaps if it needs a dense
-    day-by-day series (e.g. for a calendar heatmap).
+    day-by-day series (e.g. for a calendar heatmap). Each row also carries
+    `by_category: ReportBucketCategorySplit[]` — that day's `total_minutes`/`entry_count` split by
+    `category_id` (`null` = uncategorized), sorted by `total_minutes` descending; these always sum
+    back to the row's own `total_minutes`/`entry_count`.
   - `by_week: ReportWeekBreakdown[]` — one row per **local week overlapping the period**,
     ascending by `week_start`, **zero-filled** (weeks with no entries still appear) — the
     opposite of `by_day`'s sparse behavior. Week boundaries follow `settings.week_starts_on`
@@ -400,7 +403,9 @@ nearest whole minute) — never trusted from the client.
     `start_date`/`end_date`, so a week only partially inside the period shows only the
     overlapping days; this guarantees `sum(w.total_minutes for w in by_week) == total_minutes`
     exactly. There is deliberately **no** ISO-week-number field, since ISO week numbering is
-    always Monday-based and would be misleading for a Sunday-start week.
+    always Monday-based and would be misleading for a Sunday-start week. Each row also carries
+    `by_category: ReportBucketCategorySplit[]`, same shape/invariant as `by_day`'s (`[]` for a
+    zero-filled week with no entries).
 - `422 validation_error` → unrecognized `period` value, malformed `date`.
 
 ### `GET /reports/narrative`

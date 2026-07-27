@@ -20,6 +20,7 @@ from app.repo import (
     tag_from_row,
 )
 from app.schemas import (
+    ReportBucketCategorySplit,
     ReportCategoryBreakdown,
     ReportDayBreakdown,
     ReportNarrativeResponse,
@@ -58,12 +59,29 @@ class _TagBucket(_Bucket):
 @dataclass
 class _DayBucket(_Bucket):
     local_date: date = date.min
+    by_category: dict[int | None, _Bucket] = field(default_factory=dict)
 
 
 @dataclass
 class _WeekBucket(_Bucket):
     week_start: date = date.min
     week_end: date = date.min
+    by_category: dict[int | None, _Bucket] = field(default_factory=dict)
+
+
+def _category_splits(by_category: dict[int | None, _Bucket]) -> list[ReportBucketCategorySplit]:
+    """Sorts one bucket's per-category totals by ``total_minutes`` descending, matching
+    :attr:`ReportSummaryResponse.by_category`'s ordering convention."""
+    splits = [
+        ReportBucketCategorySplit(
+            category_id=category_id,
+            total_minutes=bucket.total_minutes,
+            entry_count=bucket.entry_count,
+        )
+        for category_id, bucket in by_category.items()
+    ]
+    splits.sort(key=lambda item: item.total_minutes, reverse=True)
+    return splits
 
 
 def _week_start_for(local_date: date, week_starts_on: str) -> date:
@@ -191,12 +209,16 @@ def get_reports_summary(
             by_tag.setdefault(tag_row["id"], _TagBucket(tag_row=tag_row)).add(duration)
 
         local_date = datetime.fromisoformat(row["start_ts"]).astimezone(tz).date()
-        by_day.setdefault(local_date.isoformat(), _DayBucket(local_date=local_date)).add(duration)
+        day_bucket = by_day.setdefault(local_date.isoformat(), _DayBucket(local_date=local_date))
+        day_bucket.add(duration)
+        day_bucket.by_category.setdefault(category_id, _Bucket()).add(duration)
 
         week_key = _week_start_for(local_date, week_starts_on)
         # Every week overlapping the period was pre-seeded above, so week_key must already be
         # present (entries are already filtered to [start_date, end_date] by the SQL query).
-        by_week[week_key].add(duration)
+        week_bucket = by_week[week_key]
+        week_bucket.add(duration)
+        week_bucket.by_category.setdefault(category_id, _Bucket()).add(duration)
 
     category_breakdown = [
         ReportCategoryBreakdown(
@@ -230,6 +252,7 @@ def get_reports_summary(
             date=bucket.local_date,
             total_minutes=bucket.total_minutes,
             entry_count=bucket.entry_count,
+            by_category=_category_splits(bucket.by_category),
         )
         for bucket in sorted(by_day.values(), key=lambda item: item.local_date)
     ]
@@ -240,6 +263,7 @@ def get_reports_summary(
             week_end=bucket.week_end,
             total_minutes=bucket.total_minutes,
             entry_count=bucket.entry_count,
+            by_category=_category_splits(bucket.by_category),
         )
         for bucket in (by_week[key] for key in sorted(by_week))
     ]
