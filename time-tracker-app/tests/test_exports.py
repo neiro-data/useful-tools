@@ -449,3 +449,39 @@ def test_export_report_pdf_non_latin1_category_and_tag_names_do_not_500(
     assert md_response.status_code == 200
     assert "Café ☕" in md_response.text
     assert "日本語" in md_response.text
+
+
+# --- by_category is a report-summary-only field, invisible to every export renderer -----------
+
+
+def test_export_renderers_ignore_reports_by_category_field(client: TestClient) -> None:
+    """`ReportBucketCategorySplit`/`by_category` was added to `ReportDayBreakdown`/
+    `ReportWeekBreakdown` for the Reports screen's stacked chart; none of the three export
+    renderers (html/md/pdf) reference it, so multi-category data must render identically to a
+    single flat category breakdown -- no crash, no stray "by_category" text leaking into output."""
+    cat1 = _make_category(client, "Deep Work")
+    cat2 = _make_category(client, "Meetings")
+    _make_entry(
+        client, "A", "2026-07-15T09:00:00+00:00", "2026-07-15T10:00:00+00:00", category_id=cat1
+    )
+    _make_entry(
+        client, "B", "2026-07-15T11:00:00+00:00", "2026-07-15T11:30:00+00:00", category_id=cat2
+    )
+
+    html_response = client.get(
+        "/exports/report.html", params={"period": "week", "date": "2026-07-15"}
+    )
+    assert html_response.status_code == 200
+    assert "by_category" not in html_response.text
+    assert "Deep Work" in html_response.text
+    assert "Meetings" in html_response.text
+
+    md_response = client.get("/exports/report.md", params={"period": "week", "date": "2026-07-15"})
+    assert md_response.status_code == 200
+    assert "by_category" not in md_response.text
+
+    pdf_response = client.get(
+        "/exports/report.pdf", params={"period": "week", "date": "2026-07-15"}
+    )
+    assert pdf_response.status_code == 200
+    assert pdf_response.content.startswith(PDF_MAGIC_HEADER)

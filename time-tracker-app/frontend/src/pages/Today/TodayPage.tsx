@@ -28,7 +28,7 @@ export function TodayPage(): ReactElement {
     const [todayResponse, categoryResponse, tagResponse] = await Promise.all([
       getToday(),
       listCategories(),
-      listTags(),
+      listTags({ limit: 200 }),
     ]);
     setToday(todayResponse);
     setCategories(categoryResponse.items);
@@ -127,6 +127,10 @@ export function TodayPage(): ReactElement {
       category_id: values.category.id,
       tag_ids: ids,
       notes: values.notes,
+      start_ts: values.startTs,
+      // CRITICAL: only send end_ts when it's actually set — an explicit `end_ts: null` clears an
+      // already-completed entry's end time (see `EntryRowSaveValues.endTs`'s doc comment).
+      ...(values.endTs !== null && { end_ts: values.endTs }),
     });
     await load();
   }
@@ -211,6 +215,7 @@ export function TodayPage(): ReactElement {
                   entry={entry}
                   categories={categories}
                   knownTags={tags}
+                  recentTags={today.recent_tags}
                   onSave={(values) => handleSaveEntry(entry.id, values)}
                   onDelete={() => handleDeleteEntry(entry.id)}
                 />

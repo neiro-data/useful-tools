@@ -26,6 +26,20 @@
   outline: none;
 }
 
+.dropdownToggle {
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 0 var(--space-1);
+  font-size: var(--text-sm);
+  line-height: 1;
+}
+
+.dropdownToggle:hover {
+  color: var(--color-text);
+}
+
 .suggestions {
   position: absolute;
   z-index: 20;
@@ -39,6 +53,16 @@
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-sm);
   min-width: 160px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.suggestionsHeading {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--color-text-muted);
 }
 
 .suggestions button {
@@ -55,5 +79,9 @@
 }
 
 .suggestions button:hover {
+  background: var(--color-bg-inset);
+}
+
+.optionActive {
   background: var(--color-bg-inset);
 }

@@ -6,6 +6,7 @@ import { formatDayHeading } from "../../utils/dateRange";
 import { formatDurationMinutes } from "../../utils/duration";
 import { totalMinutes } from "../../utils/aggregate";
 import { resolveTagIds } from "../../utils/resolveTagIds";
+import { toLocalDateTimeInput } from "../../utils/timeRange";
 import styles from "./DayGroup.module.css";
 
 interface DayGroupProps {
@@ -13,6 +14,9 @@ interface DayGroupProps {
   entries: EntryRead[];
   categories: CategoryRead[];
   knownTags: TagRead[];
+  /** Recently-used tag names, most-recent first, threaded through to `EntryRow`/`ManualEntryForm`'s
+   * `TagEditor`. Omit to fall back to `TagEditor`'s default (filter-only) behavior. */
+  recentTags?: TagRead[] | undefined;
   defaultExpanded: boolean;
   onSaveEntry: (entryId: number, values: EntryRowSaveValues) => Promise<void>;
   onDeleteEntry: (entryId: number) => Promise<void>;
@@ -27,6 +31,7 @@ export function DayGroup({
   entries,
   categories,
   knownTags,
+  recentTags,
   defaultExpanded,
   onSaveEntry,
   onDeleteEntry,
@@ -51,11 +56,13 @@ export function DayGroup({
     setAddingEntry(false);
   }
 
+  // Prefill from where the day's most recent entry left off, falling back to 09:00 on an empty
+  // day. `end_ts` is UTC on the wire, so it has to be converted to local wall time rather than
+  // string-sliced — see `toLocalDateTimeInput`.
   const firstEntry = entries[0];
   const lastEnd = firstEntry ? (firstEntry.end_ts ?? firstEntry.start_ts) : null;
-  const defaultStart = (lastEnd ?? `${isoDate}T09:00:00`).slice(0, 16);
-  const defaultStartDate = new Date(defaultStart);
-  const defaultEndDate = new Date(defaultStartDate.getTime() + 30 * 60_000);
+  const defaultStart = lastEnd !== null ? toLocalDateTimeInput(lastEnd) : `${isoDate}T09:00`;
+  const defaultEnd = toLocalDateTimeInput(new Date(new Date(defaultStart).getTime() + 30 * 60_000));
 
   return (
     <div className={styles.group}>
@@ -97,8 +104,9 @@ export function DayGroup({
             <ManualEntryForm
               categories={categories}
               knownTags={knownTags}
+              recentTags={recentTags}
               defaultStart={defaultStart}
-              defaultEnd={defaultEndDate.toISOString().slice(0, 16)}
+              defaultEnd={defaultEnd}
               onSubmit={handleManualSubmit}
               onCancel={() => setAddingEntry(false)}
             />
@@ -113,6 +121,7 @@ export function DayGroup({
                   entry={entry}
                   categories={categories}
                   knownTags={knownTags}
+                  recentTags={recentTags}
                   onSave={(values) => onSaveEntry(entry.id, values)}
                   onDelete={() => onDeleteEntry(entry.id)}
                 />

@@ -16,6 +16,12 @@
   margin: 0;
 }
 
+.calendarWeek {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-regular);
+  color: var(--color-text-secondary);
+}
+
 .nav {
   display: flex;
   align-items: center;

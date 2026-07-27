@@ -49,8 +49,8 @@ function makeSummary(overrides: Partial<ReportSummaryResponse> = {}): ReportSumm
       { tag: { id: 10, name: "focus", is_active: true }, total_minutes: 60, entry_count: 1 },
     ],
     by_day: [
-      { date: "2026-07-06", total_minutes: 90, entry_count: 2 },
-      { date: "2026-07-07", total_minutes: 60, entry_count: 1 },
+      { date: "2026-07-06", total_minutes: 90, entry_count: 2, by_category: [] },
+      { date: "2026-07-07", total_minutes: 60, entry_count: 1, by_category: [] },
     ],
     by_week: [],
     ...overrides,
@@ -96,8 +96,9 @@ describe("ReportsPage", () => {
 
     expect(screen.getByText("2h 30m")).toBeInTheDocument();
     expect(screen.getByText("3 entries")).toBeInTheDocument();
-    expect(screen.getByText("Deep Work")).toBeInTheDocument();
-    expect(screen.getByText("Uncategorized")).toBeInTheDocument();
+    // "Deep Work" appears both in the by-category breakdown and the new stacked chart's legend.
+    expect(screen.getAllByText("Deep Work").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Uncategorized").length).toBeGreaterThan(0);
     expect(screen.getByText("#focus")).toBeInTheDocument();
     expect(screen.getByText("You logged 2h 30m this week, mostly on Deep Work.")).toBeInTheDocument();
     expect(screen.getByText("Most time went to Deep Work")).toBeInTheDocument();
@@ -162,16 +163,25 @@ describe("ReportsPage", () => {
         period: "week",
         start_date: "2026-07-06",
         end_date: "2026-07-12",
-        by_day: [{ date: "2026-07-06", total_minutes: 90, entry_count: 2 }],
-        by_week: [{ week_start: "2026-06-29", week_end: "2026-07-05", total_minutes: 999, entry_count: 9 }],
+        by_day: [{ date: "2026-07-06", total_minutes: 90, entry_count: 2, by_category: [] }],
+        by_week: [
+          {
+            week_start: "2026-06-29",
+            week_end: "2026-07-05",
+            total_minutes: 999,
+            entry_count: 9,
+            by_category: [],
+          },
+        ],
       }),
     });
 
     render(<ReportsPage />);
 
     // Every weekday in the range is labeled, including days absent from `by_day` (zero-filled).
+    // Labeled by both `MiniBarChart` and `CountLineChart`, hence `getAllByText`.
     for (const label of ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]) {
-      expect(screen.getByText(label)).toBeInTheDocument();
+      expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     }
     // The by_week data is ignored for the week period.
     expect(screen.queryByText("Jun 29 – Jul 5")).not.toBeInTheDocument();
@@ -184,16 +194,28 @@ describe("ReportsPage", () => {
         start_date: "2026-06-01",
         end_date: "2026-06-30",
         by_week: [
-          { week_start: "2026-06-01", week_end: "2026-06-07", total_minutes: 120, entry_count: 3 },
-          { week_start: "2026-06-08", week_end: "2026-06-14", total_minutes: 60, entry_count: 1 },
+          {
+            week_start: "2026-06-01",
+            week_end: "2026-06-07",
+            total_minutes: 120,
+            entry_count: 3,
+            by_category: [],
+          },
+          {
+            week_start: "2026-06-08",
+            week_end: "2026-06-14",
+            total_minutes: 60,
+            entry_count: 1,
+            by_category: [],
+          },
         ],
       }),
     });
 
     render(<ReportsPage />);
 
-    expect(screen.getByText("Jun 1–7")).toBeInTheDocument();
-    expect(screen.getByText("Jun 8–14")).toBeInTheDocument();
+    expect(screen.getAllByText("CW 23").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("CW 24").length).toBeGreaterThan(0);
   });
 
   it("charts by_week for the quarter period", () => {
@@ -202,13 +224,21 @@ describe("ReportsPage", () => {
         period: "quarter",
         start_date: "2026-04-01",
         end_date: "2026-06-30",
-        by_week: [{ week_start: "2026-06-29", week_end: "2026-07-05", total_minutes: 45, entry_count: 1 }],
+        by_week: [
+          {
+            week_start: "2026-06-29",
+            week_end: "2026-07-05",
+            total_minutes: 45,
+            entry_count: 1,
+            by_category: [],
+          },
+        ],
       }),
     });
 
     render(<ReportsPage />);
 
-    expect(screen.getByText("Jun 29 – Jul 5")).toBeInTheDocument();
+    expect(screen.getAllByText("CW 27").length).toBeGreaterThan(0);
   });
 
   it("surfaces the export option matching settings.default_export_format first (md)", async () => {

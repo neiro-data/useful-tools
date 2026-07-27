@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { TimerWidget } from "./TimerWidget";
 import type { CategoryRead, EntryRead, TagRead } from "../../api/types";
@@ -365,5 +365,77 @@ describe("TimerWidget", () => {
     fireEvent.change(screen.getByLabelText("Running entry comment"), { target: { value: "" } });
 
     expect(onUpdateRunning).toHaveBeenCalledWith(expect.objectContaining({ notes: null }));
+  });
+
+  it("clears the tag chips and TagEditor's draft text after a successful Start", async () => {
+    const bug: TagRead = { id: 1, name: "bug", is_active: true };
+    const onStart = vi.fn();
+    render(
+      <TimerWidget
+        runningEntry={null}
+        categories={[deepWork]}
+        knownTags={[bug]}
+        recentCategories={[deepWork]}
+        recentTags={[]}
+        onStart={onStart}
+        onStop={noop}
+        onUpdateRunning={noop}
+        onManualAdd={noop}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("What are you working on?"), {
+      target: { value: "Deep focus block" },
+    });
+    fireEvent.click(screen.getByText("Deep Work"));
+    fireEvent.change(screen.getByLabelText("Add tag"), { target: { value: "bug" } });
+    fireEvent.keyDown(screen.getByLabelText("Add tag"), { key: "Enter" });
+    // Leave an uncommitted draft too.
+    fireEvent.change(screen.getByLabelText("Add tag"), { target: { value: "urg" } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Start ▶"));
+      await Promise.resolve();
+    });
+
+    expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ tagNames: ["bug"] }));
+    expect(screen.queryByText("#bug")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Add tag")).toHaveValue("");
+  });
+
+  it("clears the tag chips and TagEditor's draft text after a successful manual save", async () => {
+    const bug: TagRead = { id: 1, name: "bug", is_active: true };
+    const onManualAdd = vi.fn();
+    render(
+      <TimerWidget
+        runningEntry={null}
+        categories={[deepWork]}
+        knownTags={[bug]}
+        recentCategories={[deepWork]}
+        recentTags={[]}
+        onStart={noop}
+        onStop={noop}
+        onUpdateRunning={noop}
+        onManualAdd={onManualAdd}
+      />,
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("What are you working on?"), {
+      target: { value: "Deep focus block" },
+    });
+    fireEvent.click(screen.getByText("Deep Work"));
+    fireEvent.click(screen.getByText("+ Manual entry"));
+    fireEvent.change(screen.getByLabelText("Add tag"), { target: { value: "bug" } });
+    fireEvent.keyDown(screen.getByLabelText("Add tag"), { key: "Enter" });
+    fireEvent.change(screen.getByLabelText("Add tag"), { target: { value: "urg" } });
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("Save"));
+      await Promise.resolve();
+    });
+
+    expect(onManualAdd).toHaveBeenCalledWith(expect.objectContaining({ tagNames: ["bug"] }));
+    expect(screen.queryByText("#bug")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Add tag")).toHaveValue("");
   });
 });

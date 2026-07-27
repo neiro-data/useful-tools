@@ -1,0 +1,38 @@
+.chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.svg {
+  width: 100%;
+  height: 100px;
+  display: block;
+}
+
+.line {
+  fill: none;
+  stroke: var(--color-accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.marker {
+  fill: var(--color-accent);
+  stroke: var(--color-surface);
+  stroke-width: 1;
+}
+
+.labels {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-1);
+}
+
+.label {
+  flex: 1;
+  text-align: center;
+  font-size: var(--text-xs);
+  color: var(--color-text-muted);
+}

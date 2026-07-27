@@ -28,27 +28,44 @@ describe("barsFromDays", () => {
 });
 
 describe("barsFromWeeks", () => {
-  it("formats a week label compactly when it stays within one month", () => {
+  it("labels a Monday-start week by its calendar week, with the date range in the title", () => {
     const bars = barsFromWeeks([
       { week_start: "2026-06-01", week_end: "2026-06-07", total_minutes: 120 },
     ]);
 
-    expect(bars).toEqual([{ key: "2026-06-01", label: "Jun 1–7", minutes: 120 }]);
+    expect(bars).toEqual([
+      { key: "2026-06-01", label: "CW 23", title: "Jun 1–7", minutes: 120 },
+    ]);
   });
 
-  it("formats a week label with both months when it spans a month boundary", () => {
+  it("titles a week spanning a month boundary with both months", () => {
     const bars = barsFromWeeks([
       { week_start: "2026-06-29", week_end: "2026-07-05", total_minutes: 90 },
     ]);
 
-    expect(bars).toEqual([{ key: "2026-06-29", label: "Jun 29 – Jul 5", minutes: 90 }]);
+    expect(bars).toEqual([
+      { key: "2026-06-29", label: "CW 27", title: "Jun 29 – Jul 5", minutes: 90 },
+    ]);
   });
 
-  it("formats a single-day clipped week (start === end)", () => {
+  it("labels a single-day clipped week (start === end) by that day's calendar week", () => {
     const bars = barsFromWeeks([
       { week_start: "2026-06-01", week_end: "2026-06-01", total_minutes: 45 },
     ]);
 
-    expect(bars).toEqual([{ key: "2026-06-01", label: "Jun 1–1", minutes: 45 }]);
+    expect(bars).toEqual([
+      { key: "2026-06-01", label: "CW 23", title: "Jun 1–1", minutes: 45 },
+    ]);
+  });
+
+  it("labels a Sunday-start week by the ISO week its Monday–Saturday days belong to (off-by-one fix)", () => {
+    // Sunday-start bucket: 2026-07-05 (Sun) .. 2026-07-11 (Sat). The Sunday itself is the last day
+    // of ISO week 27, but Monday–Saturday (the other six days) are ISO week 28 — the bucket must
+    // report CW 28, not CW 27.
+    const bars = barsFromWeeks([
+      { week_start: "2026-07-05", week_end: "2026-07-11", total_minutes: 60 },
+    ]);
+
+    expect(bars[0]).toMatchObject({ label: "CW 28" });
   });
 });

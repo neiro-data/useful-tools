@@ -86,6 +86,39 @@ export function formatShortDate(isoDate: string): string {
   return `${month} ${date.getDate()}`;
 }
 
+/** ISO-8601 week number (1–53) of the week containing `date`.
+ *
+ * ISO weeks are Monday-start and belong to the year containing their Thursday, so the number is
+ * derived from that Thursday rather than from `date` itself — this is what makes Dec 29–31 land in
+ * week 1 of the next year (and Jan 1–3 in week 52/53 of the previous one) instead of overflowing to
+ * 53/54. Arithmetic stays on local midnights; the `Math.round` absorbs the ±1h a DST transition
+ * introduces between the two Thursdays. */
+export function isoWeekNumber(date: Date): number {
+  const thursday = thursdayOfIsoWeek(new Date(date.getFullYear(), date.getMonth(), date.getDate()));
+  // Jan 4 is always in ISO week 1, so its week's Thursday anchors week 1 of that ISO year.
+  const firstThursday = thursdayOfIsoWeek(new Date(thursday.getFullYear(), 0, 4));
+  const DAY_MS = 86_400_000;
+  return 1 + Math.round((thursday.getTime() - firstThursday.getTime()) / (7 * DAY_MS));
+}
+
+function thursdayOfIsoWeek(date: Date): Date {
+  const mondayIndex = (date.getDay() + 6) % 7; // 0 = Monday … 6 = Sunday
+  const thursday = new Date(date);
+  thursday.setDate(thursday.getDate() + 3 - mondayIndex);
+  return thursday;
+}
+
+/** e.g. `"CW 07"` / `"CW 29"` — the zero-padded calendar-week label used in the Week header and as
+ * the Quarter report's per-bar x-label. */
+export function formatCalendarWeek(date: Date): string {
+  return `CW ${String(isoWeekNumber(date)).padStart(2, "0")}`;
+}
+
+/** `formatCalendarWeek` for a `YYYY-MM-DD` string (e.g. a report's `week_start`). */
+export function formatCalendarWeekOfIsoDate(isoDate: string): string {
+  return formatCalendarWeek(new Date(`${isoDate}T00:00:00`));
+}
+
 /** e.g. `"Jul 7 – 13"` for the Week header, or `"Jul 7 – Aug 2"` if the range spans months. */
 export function formatWeekHeading(range: DateRange): string {
   const startMonth = range.start.toLocaleDateString(undefined, { month: "short" });

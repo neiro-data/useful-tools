@@ -526,3 +526,75 @@ def test_reports_summary_day_boundary_resolves_against_configured_timezone(
         "/entries", params={"start_date": "2026-07-13", "end_date": "2026-07-19"}
     ).json()
     assert entry not in {item["id"] for item in tokyo_entries["items"]}
+
+
+# --- by_day / by_week by_category -----------------------------------------------------------
+
+
+def test_reports_summary_by_day_category_split_sums_to_bucket_total_and_is_sorted(
+    client: TestClient,
+) -> None:
+    fixture = _build_fixture(client)
+
+    response = client.get("/reports/summary", params={"period": "week", "date": "2026-07-15"})
+
+    body = response.json()
+    for day in body["by_day"]:
+        assert sum(split["total_minutes"] for split in day["by_category"]) == day["total_minutes"]
+        totals = [split["total_minutes"] for split in day["by_category"]]
+        assert totals == sorted(totals, reverse=True)
+
+    # 2026-07-13 only has entry A (cat1, 60 min): a single split, matching cat1.
+    day_13 = next(d for d in body["by_day"] if d["date"] == "2026-07-13")
+    assert day_13["by_category"] == [
+        {"category_id": fixture["cat1"], "total_minutes": 60, "entry_count": 1}
+    ]
+
+
+def test_reports_summary_by_category_split_multi_tag_entry_not_double_counted(
+    client: TestClient,
+) -> None:
+    """Entry A carries two tags but a single category: its 60 minutes must appear exactly once in
+    that day's `by_category` split (tags are orthogonal to categories, unlike `by_tag`)."""
+    fixture = _build_fixture(client)
+
+    response = client.get("/reports/summary", params={"period": "week", "date": "2026-07-15"})
+
+    body = response.json()
+    day_13 = next(d for d in body["by_day"] if d["date"] == "2026-07-13")
+    assert len(day_13["by_category"]) == 1
+    assert day_13["by_category"][0]["category_id"] == fixture["cat1"]
+    assert day_13["by_category"][0]["total_minutes"] == 60
+
+
+def test_reports_summary_by_category_split_uncategorized_is_null(client: TestClient) -> None:
+    """An entry's `category_id` is mandatory on the wire, but a bucket's split still uses
+    `category_id: null` as its uncategorized bucket key when applicable (schema-level contract:
+    the field is nullable and documented as grouping "uncategorized" time)."""
+    fixture = _build_fixture(client)
+
+    response = client.get("/reports/summary", params={"period": "week", "date": "2026-07-15"})
+
+    body = response.json()
+    # No entry in the fixture is actually uncategorized (category is mandatory), so every split's
+    # category_id should be non-null here -- this pins that behavior explicitly.
+    for day in body["by_day"]:
+        for split in day["by_category"]:
+            assert split["category_id"] in {fixture["cat1"], fixture["cat2"], fixture["cat3"]}
+
+
+def test_reports_summary_by_week_category_split_sums_to_bucket_total_including_zero_weeks(
+    client: TestClient,
+) -> None:
+    fixture = _build_fixture(client)
+
+    response = client.get("/reports/summary", params={"period": "month", "date": "2026-07-15"})
+
+    body = response.json()
+    for week in body["by_week"]:
+        assert sum(split["total_minutes"] for split in week["by_category"]) == week["total_minutes"]
+        if week["total_minutes"] == 0:
+            assert week["by_category"] == []
+
+    assert any(week["total_minutes"] == 0 for week in body["by_week"])
+    assert fixture["cat1"] is not None

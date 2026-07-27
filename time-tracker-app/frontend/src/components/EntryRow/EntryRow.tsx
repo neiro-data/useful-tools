@@ -4,8 +4,10 @@ import { CategoryChip } from "../CategoryChip/CategoryChip";
 import { CategoryPicker } from "../CategoryPicker/CategoryPicker";
 import { TagChip } from "../TagChip/TagChip";
 import { TagEditor } from "../TagChip/TagEditor";
+import { DateTimePicker } from "../DateTimePicker/DateTimePicker";
 import { formatDurationMinutes } from "../../utils/duration";
 import { categoryColorVar } from "../../utils/categoryColor";
+import { timeRangeError, toLocalDateTimeInput } from "../../utils/timeRange";
 import styles from "./EntryRow.module.css";
 
 export interface EntryRowSaveValues {
@@ -15,12 +17,21 @@ export interface EntryRowSaveValues {
    * `ManualEntryForm`/`TimerWidget` for the same convention). */
   notes: string | null;
   tagNames: string[];
+  /** ISO UTC, per `EntryUpdate.start_ts`. */
+  startTs: string;
+  /** ISO UTC, or `null` while the entry is still running — CRITICAL: callers must never send
+   * `end_ts: null` for an already-completed entry (that clears it and nulls `duration_minutes`);
+   * this is only ever `null` here when `entry.end_ts` was already `null` (a running entry). */
+  endTs: string | null;
 }
 
 interface EntryRowProps {
   entry: EntryRead;
   categories: CategoryRead[];
   knownTags: TagRead[];
+  /** Recently-used tag names, most-recent first, for `TagEditor`'s "Recent" section. Omit to fall
+   * back to `TagEditor`'s default (filter-only) behavior. */
+  recentTags?: TagRead[] | undefined;
   /** Renders the accent (not category) color bar + pulse — this is the live running entry. */
   isRunning?: boolean;
   onSave: (values: EntryRowSaveValues) => Promise<void> | void;
@@ -33,6 +44,7 @@ export function EntryRow({
   entry,
   categories,
   knownTags,
+  recentTags,
   isRunning = false,
   onSave,
   onDelete,
@@ -42,22 +54,39 @@ export function EntryRow({
   const [category, setCategory] = useState<CategoryRead | null>(entry.category);
   const [tagNames, setTagNames] = useState<string[]>(entry.tags.map((tag) => tag.name));
   const [notes, setNotes] = useState(entry.notes ?? "");
+  const [start, setStart] = useState(() => toLocalDateTimeInput(entry.start_ts));
+  const [end, setEnd] = useState(() => (entry.end_ts !== null ? toLocalDateTimeInput(entry.end_ts) : ""));
   const [saving, setSaving] = useState(false);
+
+  // A running entry (end_ts === null) has no end to edit/validate — see `EntryRowSaveValues.endTs`
+  // for why `endTs: null` must never be sent for an already-completed entry.
+  const isEntryRunning = entry.end_ts === null;
+  const rangeError = isEntryRunning ? null : timeRangeError(start, end);
 
   function startEdit(): void {
     setTitle(entry.title);
     setCategory(entry.category);
     setTagNames(entry.tags.map((tag) => tag.name));
     setNotes(entry.notes ?? "");
+    setStart(toLocalDateTimeInput(entry.start_ts));
+    setEnd(entry.end_ts !== null ? toLocalDateTimeInput(entry.end_ts) : "");
     setMode("edit");
   }
 
   async function save(): Promise<void> {
     if (category === null) return;
+    if (rangeError !== null) return;
     setSaving(true);
     try {
       const trimmedNotes = notes.trim();
-      await onSave({ title, category, tagNames, notes: trimmedNotes.length > 0 ? trimmedNotes : null });
+      await onSave({
+        title,
+        category,
+        tagNames,
+        notes: trimmedNotes.length > 0 ? trimmedNotes : null,
+        startTs: new Date(start).toISOString(),
+        endTs: isEntryRunning ? null : new Date(end).toISOString(),
+      });
       setMode("view");
     } finally {
       setSaving(false);
@@ -105,8 +134,28 @@ export function EntryRow({
           />
           <div className={styles.editMeta}>
             <CategoryPicker categories={categories} value={category} onChange={setCategory} required />
-            <TagEditor value={tagNames} onChange={setTagNames} knownTags={knownTags} />
+            <TagEditor
+              value={tagNames}
+              onChange={setTagNames}
+              knownTags={knownTags}
+              recentTags={recentTags}
+            />
           </div>
+          <div className={styles.timesRow}>
+            <DateTimePicker value={start} onChange={setStart} label="Start" />
+            {isEntryRunning ? (
+              <span className={styles.runningTimeSlot} aria-disabled="true">
+                Running…
+              </span>
+            ) : (
+              <DateTimePicker value={end} onChange={setEnd} label="End" />
+            )}
+          </div>
+          {rangeError && (
+            <p className={styles.error} role="alert">
+              {rangeError}
+            </p>
+          )}
           {/* User-facing label is "Comment"; the prop/wire field stays `notes`. */}
           <input
             className={styles.notesInput}
@@ -119,7 +168,7 @@ export function EntryRow({
             <button
               type="button"
               className={styles.primaryButton}
-              disabled={saving || category === null}
+              disabled={saving || category === null || rangeError !== null}
               onClick={() => void save()}
             >
               Save
