@@ -525,27 +525,41 @@ strings (not reformatted).
     as above; date stamp is the export's generation date, not the query range).
 - `422 validation_error` → `end_date < start_date`.
 
+`GET /exports/backup` and `GET /exports/entries.csv` are unaffected by the report-restyling work
+below — both remain byte-identical to their previous output.
+
 ### `GET /exports/report.html`
 
 Query params mirror `GET /reports/summary`: `period: ReportPeriod` (required), `date: date |
 None`. Internally calls `get_reports_summary` (the same aggregation `GET /reports/summary` uses)
-and renders its `ReportSummaryResponse` as HTML — no separate aggregation logic.
+and `build_narrative` (the same rule-based narrative `GET /reports/narrative` uses) — no separate
+aggregation or narrative logic.
 
 Rendered as a single, self-contained, **email-client-safe** document: inline `style="..."`
 attributes and `<table>`-based layout only (no `<style>` block, no external CSS, no JS, no SVG —
-Outlook strips all three), so it pastes cleanly into Outlook. Includes a heading (period +
-resolved date range + timezone), a totals line (total time as `Hh Mm` + entry count), three
-horizontal bar charts (proportional-width colored table cells, drawn the same Outlook-safe way),
-and `by_category`/`by_tag`/`by_day` tables (time shown as `Hh Mm`):
+Outlook strips all three), so it pastes cleanly into Outlook. Visually mirrors the Reports page
+(`ReportsPage.tsx`): light-theme card sections (`SURFACE`-filled, `BORDER`-stroked, using the
+literal hex tokens in `app/report_theme.py`, transcribed from `design/tokens.css`), in this
+section order:
 
-- A "By day" chart (`period == week`) or "By week" chart (`period == month | quarter`) — reuses
-  `summary.by_day`/`summary.by_week` respectively (`by_week` is already zero-filled, so this
-  chart never has to fill gaps itself).
-- A "By category" chart beside the by-category table.
-- A "By tag" chart beside the by-tag table.
+1. Header — title, resolved date range, timezone.
+2. Total time card — total (`Hh Mm`, monospace) + entry count.
+3. By category — a segmented bar (one colored `<td>` per category, width proportional to that
+   category's share of the category total) + legend, then a `Category / Color / Time / Entries`
+   table. Category colors resolve via `app.report_theme.resolve_category_color`, mirroring
+   `frontend/src/utils/categoryColor.ts`; `Uncategorized` gets the `slate` fallback.
+4. By tag — same segmented-bar-plus-table treatment, with neutral grayscale segment colors
+   (`app.report_theme.tag_gray`, cycled) since tags have no stored color.
+5. A "By day" chart (`period == week`) or "By week" chart (`period == month | quarter`) — reuses
+   `summary.by_day`/`summary.by_week` (`by_week` is already zero-filled), bars colored `ACCENT`.
+6. An "Entries per day/week" count chart (same buckets, `ACCENT`-colored) plus the by-day table.
+7. Summary — the narrative paragraph + highlights bullet list from `build_narrative`, **last**
+   (matching the Reports page's layout).
 
-Each bar's width is proportional to that chart's largest value (`round(100 * value / max_value)`
-percent); bars are `<table>` cells with `background-color`, not images/SVG.
+Every chart's bar/segment width is proportional to that chart's largest value or that section's
+total; bars/segments are `<table>` cells with `background-color` (plus a matching HTML `width`
+attribute for Outlook's table engine), not images/SVG. Segmented-breakdown segments are floored at
+1% width so a small share doesn't visually collapse to nothing.
 
 - `200` → `text/html` body, returned **inline** (not `Content-Disposition: attachment` — meant to
   be viewed in a browser and copy-pasted, not downloaded).
@@ -554,12 +568,16 @@ percent); bars are `<table>` cells with `background-color`, not images/SVG.
 ### `GET /exports/report.md`
 
 Query params: identical to `GET /exports/report.html` (`period: ReportPeriod` required, `date:
-date | None` optional). Internally calls `get_reports_summary` — no separate aggregation logic.
+date | None` optional). Internally calls `get_reports_summary` and `build_narrative` — no
+separate aggregation or narrative logic.
 
-Same content/structure as `GET /exports/report.html` (heading, totals, the same three bar charts,
-`by_category`/`by_tag`/`by_day` tables), rendered as Markdown tables. Bar charts use `█`/`░`
-block characters (20 characters wide, proportional to the chart's largest value) instead of HTML
-bars.
+Content parity (not visual restyling — Markdown has no card/color layout) with
+`GET /exports/report.html`'s section order: header, total-time line, `By category`/`By tag`
+breakdown tables (`| Category | Color | Time | % | Bar |`, with a `█`/`░` block-character bar
+proportional to that section's percent and the literal hex color as text), the sub-period bar
+chart, the entries-per-day/week chart + by-day table, and finally a `## Summary` section with the
+narrative paragraph and a `-` bullet per highlight. Table cells escape `|` (a category/tag name
+containing `|` would otherwise corrupt the table).
 
 - `200` → `text/markdown` body.
   - `Content-Disposition: attachment; filename="<label>-report-<YYYYMMDD>.md"` (`<label>` slug
@@ -568,20 +586,25 @@ bars.
 
 ### `GET /exports/report.pdf`
 
-Query params: identical to `GET /exports/report.html`. Internally calls `get_reports_summary` —
-no separate aggregation logic.
+Query params: identical to `GET /exports/report.html`. Internally calls `get_reports_summary` and
+`build_narrative` — no separate aggregation or narrative logic.
 
-Same content/structure as `GET /exports/report.html`, rendered with **fpdf2** (pure Python, no
+Same section order/content as `GET /exports/report.html`, rendered with **fpdf2** (pure Python, no
 system libraries required — chosen over e.g. weasyprint, which needs cairo/pango and would be a
-poor fit for an offline local app). Bar charts are drawn as real filled rectangles
-(`FPDF.rect(..., style="F")`), proportional to the chart's largest value; tables are drawn as
-bordered cells.
+poor fit for an offline local app). Each section is drawn inside a `BORDER`-stroked card (rounded
+corners via `FPDF.rect(..., round_corners=True)` where supported, falling back to a square-cornered
+rect otherwise); the card border is drawn *after* its content, using the recorded start/end Y, so
+variable-height content (the narrative, highlights) doesn't mis-size the box. Segmented breakdowns
+are drawn as adjacent filled rects sized by percent, with a swatch-plus-text legend below; the
+category table's `Color` column is a filled swatch rect, not hex text. Highlights use
+`FPDF.multi_cell` so long entries wrap. `fpdf2`'s draw/fill/text color state is reset after every
+section (it's otherwise sticky across cells/rects).
 
 **Character set limitation:** fpdf2's built-in Helvetica font only supports Latin-1. Any free-text
-string that reaches the PDF (category/tag names, chart labels, the database label, etc.) is passed
-through a lossy Latin-1 sanitizer, so characters outside Latin-1 (e.g. emoji, CJK) render as `?` in
-the PDF only — `GET /exports/report.html` and `GET /exports/report.md` render the original
-characters intact.
+string that reaches the PDF (category/tag names, chart labels, the narrative, highlights, the
+database label, etc.) is passed through a lossy Latin-1 sanitizer, so characters outside Latin-1
+(e.g. emoji, CJK) render as `?` in the PDF only — `GET /exports/report.html` and
+`GET /exports/report.md` render the original characters intact.
 
 - `200` → `application/pdf` body.
   - `Content-Disposition: attachment; filename="<label>-report-<YYYYMMDD>.pdf"` (`<label>` slug
