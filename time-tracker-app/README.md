@@ -4,6 +4,8 @@
 
 # Time Tracker App
 
+## Resume
+
 A personal, offline-first time tracker. It runs entirely on `localhost`: a **FastAPI** backend
 with **SQLite** as the canonical data store, and a **React** single-page app frontend. There is no
 cloud dependency — all data lives in a local SQLite file.
@@ -19,7 +21,7 @@ One can still export it as Markdown file (more raw format), HTML and PDF -
 which is a easy way to send by email.
 An export of the database is also always possible.
 
-## Features
+### Features
 
 - **Time tracking** — log entries against categories and tags; a live timer for the current task.
 - **Today / Week / Month** — review tracked time across day, week, and month views; the Week header
@@ -34,7 +36,7 @@ An export of the database is also always possible.
 - **Settings** — configure timezone (drives day boundaries), week start, default entry mode, and
   default export format.
 
-## Project layout
+### Project layout
 
 ```
 time-tracker-app/
