@@ -1,3 +1,7 @@
+> Date: 27/08/2026
+> Creator: Nelson Eiró
+> version v1.0
+
 # Time Tracker App
 
 A personal, offline-first time tracker. It runs entirely on `localhost`: a **FastAPI** backend
@@ -7,6 +11,13 @@ cloud dependency — all data lives in a local SQLite file.
 - **Backend:** FastAPI + SQLite (`app/`) — implements `app/API_CONTRACT.md`.
 - **Frontend:** React SPA (`frontend/`) — Today, Week, Month, Reports, and Settings screens
   (see `frontend/README.md`).
+
+As of this point, the app is in the version v1.0. 
+Most of the identified bugs were corrected and the app is outputting what is intended.
+Regarding the reports, the Outlook-compatibility had to be dropped in order to have the report graphics.
+One can still export it as Markdown file (more raw format), HTML and PDF - 
+which is a easy way to send by email.
+An export of the database is also always possible.
 
 ## Features
 
