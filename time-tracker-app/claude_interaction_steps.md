@@ -904,3 +904,26 @@ each serves.
   reads design/tokens.css. Deliberately NOT parsing the CSS at runtime (design/ is outside the pkg).
 - Gates re-run by orchestrator: ruff format+check clean, mypy 22 files clean, pytest 226 passed.
 - Not verified: no visual eyeball of the rendered PDF/HTML output.
+
+## feat/exports-ui-design-parity — PR #26 (follow-up commit)
+
+- Goal: remove the data tables from the reports and make HTML/PDF match the Reports UI *shape*,
+  not just its tokens. User decisions: drop ALL three tables (category/tag/day), keep the LIGHT
+  theme, and DROP the Outlook-pasteable constraint on the HTML export so inline SVG is allowed.
+- Markdown again limited to content parity (no styling layer) — table removals + heading renames only.
+- Pipeline: plan skipped (files read inline) -> python-pro implemented -> test-automator (independent,
+  +27 tests) -> code-reviewer -> python-pro fixed 3 findings.
+- Charts ported from the frontend: StackedCategoryChart (vertical stacked columns) and CountLineChart
+  (SVG polyline + HTML markers, `(i+0.5)/N` slots so both charts share an x-axis). Two-column top row.
+- Bucket labels ported from MiniBarChart/bars.ts: Mon/Tue for days, `CW 27` for weeks
+  (Thursday-anchored ISO week — week_start may be Sunday-start). Tag legend capped at 5 + "+N more",
+  matching SegmentedBreakdown's visibleLimit.
+- Review findings fixed: (1) PDF two-column row disabled pagination and fpdf2 SILENTLY drops content
+  past the page — now measures first and falls back to stacked full-width cards; (2) PDF segmented-bar
+  1mm floor could overflow the card — widths now renormalized; (3) Markdown narrative/highlights
+  bypassed escaping.
+- Gates re-run by orchestrator: ruff format+check clean, mypy 22 files clean, pytest 253 passed.
+- VERIFIED VISUALLY this time (the gap flagged last commit): rendered week/month/quarter + empty
+  period to HTML and PDF against a scratch DB, rasterized both, compared against the app screenshot.
+  Caught 2 defects that way (ISO-date axis labels unreadable at quarter granularity; PDF title
+  justified when wrapped) that no test would have caught.

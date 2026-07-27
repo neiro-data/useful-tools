@@ -489,7 +489,7 @@ unchanged. `id` is server-owned and never client-settable.
 |---|---|---|
 | GET | `/exports/backup` | Download a full, consistent SQLite database snapshot. |
 | GET | `/exports/entries.csv` | Download completed entries as CSV. |
-| GET | `/exports/report.html` | View an Outlook-pasteable HTML report. |
+| GET | `/exports/report.html` | View an HTML report. |
 | GET | `/exports/report.md` | Download a Markdown report. |
 | GET | `/exports/report.pdf` | Download a PDF report. |
 
@@ -535,31 +535,35 @@ None`. Internally calls `get_reports_summary` (the same aggregation `GET /report
 and `build_narrative` (the same rule-based narrative `GET /reports/narrative` uses) — no separate
 aggregation or narrative logic.
 
-Rendered as a single, self-contained, **email-client-safe** document: inline `style="..."`
-attributes and `<table>`-based layout only (no `<style>` block, no external CSS, no JS, no SVG —
-Outlook strips all three), so it pastes cleanly into Outlook. Visually mirrors the Reports page
-(`ReportsPage.tsx`): light-theme card sections (`SURFACE`-filled, `BORDER`-stroked, using the
-literal hex tokens in `app/report_theme.py`, transcribed from `design/tokens.css`), in this
-section order:
+Rendered as a single, self-contained HTML document (one inline `<style>` block, inline `<svg>` for
+the entries-per-bucket chart, no external CSS/fonts/images/JS). There is no Outlook-compatibility
+constraint on this export. Visually mirrors the Reports page (`ReportsPage.tsx`): light-theme card
+sections (`SURFACE`-filled, `BORDER`-stroked, using the literal hex tokens in
+`app/report_theme.py`, transcribed from `design/tokens.css`), in this layout:
 
-1. Header — title, resolved date range, timezone.
-2. Total time card — total (`Hh Mm`, monospace) + entry count.
-3. By category — a segmented bar (one colored `<td>` per category, width proportional to that
-   category's share of the category total) + legend, then a `Category / Color / Time / Entries`
-   table. Category colors resolve via `app.report_theme.resolve_category_color`, mirroring
-   `frontend/src/utils/categoryColor.ts`; `Uncategorized` gets the `slate` fallback.
-4. By tag — same segmented-bar-plus-table treatment, with neutral grayscale segment colors
-   (`app.report_theme.tag_gray`, cycled) since tags have no stored color.
-5. A "By day" chart (`period == week`) or "By week" chart (`period == month | quarter`) — reuses
-   `summary.by_day`/`summary.by_week` (`by_week` is already zero-filled), bars colored `ACCENT`.
-6. An "Entries per day/week" count chart (same buckets, `ACCENT`-colored) plus the by-day table.
-7. Summary — the narrative paragraph + highlights bullet list from `build_narrative`, **last**
+1. A two-column top row: the left card has the title, resolved date range/timezone, total time
+   (`Hh Mm`, monospace), and entry count; the right card has the "By category"/"By tag" segmented
+   breakdowns (a flex-row bar sized by each segment's share, plus a swatch/name/time/percent
+   legend — no data table). Category colors resolve via `app.report_theme.resolve_category_color`,
+   mirroring `frontend/src/utils/categoryColor.ts`; `Uncategorized` gets the `slate` fallback. Tag
+   segments use neutral grayscale colors (`app.report_theme.tag_gray`, cycled). The two columns
+   collapse to one at narrow widths.
+2. "Hours by category" — a port of `StackedCategoryChart.tsx`: a swatch/name legend, then one
+   column per bucket (day for `period == week`, week otherwise; `by_day` is zero-filled to match
+   the app's client-side zero-fill, `by_week` is already zero-filled), each a vertical stack of
+   category-colored blocks sized by that category's share of the bucket, with the whole stack's
+   height proportional to the period's busiest bucket.
+3. "Entries per day/week" — a port of `CountLineChart.tsx`: an inline `<svg>` polyline
+   (`preserveAspectRatio="none"`, `vector-effect="non-scaling-stroke"`) plus round HTML markers and
+   count labels layered on top at the same `(x%, y%)` coordinates (markers are HTML, not SVG
+   `<circle>`, so the chart's non-uniform scaling doesn't stretch them into ellipses). Both charts
+   share the same `(i + 0.5) / N` per-bucket x-slot, so columns and points line up.
+4. Summary — the narrative paragraph + highlights bullet list from `build_narrative`, **last**
    (matching the Reports page's layout).
 
-Every chart's bar/segment width is proportional to that chart's largest value or that section's
-total; bars/segments are `<table>` cells with `background-color` (plus a matching HTML `width`
-attribute for Outlook's table engine), not images/SVG. Segmented-breakdown segments are floored at
-1% width so a small share doesn't visually collapse to nothing.
+No export renders a `<table>` for tabular data. User-derived strings (category/tag names,
+timezone, narrative, highlights) are escaped with `html.escape()` at the point of rendering,
+including inside `title`/`style` attribute values.
 
 - `200` → `text/html` body, returned **inline** (not `Content-Disposition: attachment` — meant to
   be viewed in a browser and copy-pasted, not downloaded).
@@ -571,13 +575,17 @@ Query params: identical to `GET /exports/report.html` (`period: ReportPeriod` re
 date | None` optional). Internally calls `get_reports_summary` and `build_narrative` — no
 separate aggregation or narrative logic.
 
-Content parity (not visual restyling — Markdown has no card/color layout) with
-`GET /exports/report.html`'s section order: header, total-time line, `By category`/`By tag`
-breakdown tables (`| Category | Color | Time | % | Bar |`, with a `█`/`░` block-character bar
-proportional to that section's percent and the literal hex color as text), the sub-period bar
-chart, the entries-per-day/week chart + by-day table, and finally a `## Summary` section with the
-narrative paragraph and a `-` bullet per highlight. Table cells escape `|` (a category/tag name
-containing `|` would otherwise corrupt the table).
+Content parity (not visual restyling — Markdown has no card/color/SVG layout, and this is a
+deliberate, already-agreed limitation) with `GET /exports/report.html`'s content: header,
+total-time line, `By category`/`By tag` breakdown tables (`| Category | Color | Time | % | Bar |`,
+with a `█`/`░` block-character bar proportional to that section's percent and the literal hex
+color as text), a "Hours by category" `█`/`░` bar chart (one row per bucket, reusing the same
+zero-filled day/week buckets as the HTML/PDF stacked chart, but with no per-category split — a
+single bar per bucket), the entries-per-day/week `█`/`░` bar chart, and finally a `## Summary`
+section with the narrative paragraph and a `-` bullet per highlight. No export renders a data
+table for tabular data (Markdown's segmented-breakdown/bar-chart tables encode a chart, not a
+data table). Table cells escape `|` (a category/tag name containing `|` would otherwise corrupt
+the table).
 
 - `200` → `text/markdown` body.
   - `Content-Disposition: attachment; filename="<label>-report-<YYYYMMDD>.md"` (`<label>` slug
@@ -589,16 +597,23 @@ containing `|` would otherwise corrupt the table).
 Query params: identical to `GET /exports/report.html`. Internally calls `get_reports_summary` and
 `build_narrative` — no separate aggregation or narrative logic.
 
-Same section order/content as `GET /exports/report.html`, rendered with **fpdf2** (pure Python, no
-system libraries required — chosen over e.g. weasyprint, which needs cairo/pango and would be a
-poor fit for an offline local app). Each section is drawn inside a `BORDER`-stroked card (rounded
-corners via `FPDF.rect(..., round_corners=True)` where supported, falling back to a square-cornered
-rect otherwise); the card border is drawn *after* its content, using the recorded start/end Y, so
-variable-height content (the narrative, highlights) doesn't mis-size the box. Segmented breakdowns
-are drawn as adjacent filled rects sized by percent, with a swatch-plus-text legend below; the
-category table's `Color` column is a filled swatch rect, not hex text. Highlights use
-`FPDF.multi_cell` so long entries wrap. `fpdf2`'s draw/fill/text color state is reset after every
-section (it's otherwise sticky across cells/rects).
+Same section order/content as `GET /exports/report.html` — including the two-column top row and
+the stacked-category/line charts — rendered with **fpdf2** (pure Python, no system libraries
+required — chosen over e.g. weasyprint, which needs cairo/pango and would be a poor fit for an
+offline local app). Each section is drawn inside a `BORDER`-stroked card (rounded corners via
+`FPDF.rect(..., round_corners=True)` where supported, falling back to a square-cornered rect
+otherwise); the card border is drawn *after* its content, using the recorded start/end Y, so
+variable-height content (the narrative, highlights) doesn't mis-size the box. The top row's two
+cards are a special case: auto page break is disabled while both are drawn so their content stays
+vertically in sync, and both borders are drawn together at `height = max(left, right)` once both
+are done. Segmented breakdowns are drawn as adjacent filled rects sized by percent, with a
+swatch-plus-text legend below (no data table). "Hours by category" draws each bucket as a vertical
+stack of filled rects (height proportional to the busiest bucket, each segment proportional to its
+share); "Entries per day/week" draws a polyline through filled-circle markers with a count label
+above each one — both share the same `(i + 0.5) / N` per-bucket x-slot as the HTML chart, so a
+reader flipping between formats sees the same bucket alignment. Highlights use `FPDF.multi_cell` so
+long entries wrap. `fpdf2`'s draw/fill/text color state is reset after every section (it's
+otherwise sticky across cells/rects).
 
 **Character set limitation:** fpdf2's built-in Helvetica font only supports Latin-1. Any free-text
 string that reaches the PDF (category/tag names, chart labels, the narrative, highlights, the

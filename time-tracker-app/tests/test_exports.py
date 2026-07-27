@@ -3,9 +3,12 @@
 import csv
 import io
 import re
+from html import escape
 
 import pytest
 from fastapi.testclient import TestClient
+
+from app.report_theme import CAT_PALETTE
 
 SQLITE_MAGIC_HEADER = b"SQLite format 3\x00"
 
@@ -251,6 +254,24 @@ def test_export_report_html_is_self_contained(client: TestClient) -> None:
     assert "<script" not in body
 
 
+def test_export_report_html_has_no_data_tables(client: TestClient) -> None:
+    """The Reports page has no tables; the segmented-breakdown legends carry the numbers instead,
+    so the HTML export must not render any ``<table>`` markup."""
+    category_id = _make_category(client, "Deep Work")
+    _make_entry(
+        client,
+        "Entry",
+        "2026-07-15T10:00:00+00:00",
+        "2026-07-15T11:00:00+00:00",
+        category_id=category_id,
+    )
+
+    response = client.get("/exports/report.html", params={"period": "week", "date": "2026-07-15"})
+
+    assert response.status_code == 200
+    assert "<table" not in response.text
+
+
 def test_export_report_html_requires_period(client: TestClient) -> None:
     response = client.get("/exports/report.html")
 
@@ -267,42 +288,43 @@ def test_export_report_html_invalid_period_is_validation_error(client: TestClien
     assert body["error"]["code"] == "validation_error"
 
 
-# --- report.html bar charts (Outlook-safety + content) ------------------------------------
+# --- report.html charts (self-containment + content) --------------------------------------
 
 
-def test_export_report_html_bar_charts_are_outlook_safe(client: TestClient) -> None:
-    """The bar charts must be nested tables with inline styles only -- no <style> block, no
-    <svg>, no <script> anywhere, since Outlook strips all three."""
-    category_id = _make_category(client, "Deep Work")
-    _make_entry(
-        client,
-        "Entry",
-        "2026-07-15T10:00:00+00:00",
-        "2026-07-15T11:00:00+00:00",
-        category_id=category_id,
+def test_export_report_html_stacked_chart_title_is_hours_by_category_for_all_periods(
+    client: TestClient,
+) -> None:
+    """The stacked chart's title is now the same regardless of bucket granularity (day vs. week),
+    unlike the retired horizontal bar chart's "By day"/"By week" titles."""
+    week_response = client.get(
+        "/exports/report.html", params={"period": "week", "date": "2026-07-15"}
+    )
+    month_response = client.get(
+        "/exports/report.html", params={"period": "month", "date": "2026-07-15"}
+    )
+    quarter_response = client.get(
+        "/exports/report.html", params={"period": "quarter", "date": "2026-07-15"}
     )
 
+    assert week_response.status_code == 200
+    assert month_response.status_code == 200
+    assert quarter_response.status_code == 200
+    assert "Hours by category" in week_response.text
+    assert "Hours by category" in month_response.text
+    assert "Hours by category" in quarter_response.text
+
+
+def test_export_report_html_count_chart_title_is_per_day_for_week_period(
+    client: TestClient,
+) -> None:
     response = client.get("/exports/report.html", params={"period": "week", "date": "2026-07-15"})
 
     assert response.status_code == 200
-    body = response.text
-    assert "<style" not in body
-    assert "<svg" not in body
-    assert "<script" not in body
-    # Bar chart cells are nested tables with inline style attributes.
-    assert "background-color: #2f5bd7" in body
-    assert '<table cellpadding="0" cellspacing="0" border="0"' in body
+    assert "Entries per day" in response.text
+    assert "Entries per week" not in response.text
 
 
-def test_export_report_html_chart_title_is_by_day_for_week_period(client: TestClient) -> None:
-    response = client.get("/exports/report.html", params={"period": "week", "date": "2026-07-15"})
-
-    assert response.status_code == 200
-    assert "By day" in response.text
-    assert "By week" not in response.text
-
-
-def test_export_report_html_chart_title_is_by_week_for_month_and_quarter(
+def test_export_report_html_count_chart_title_is_per_week_for_month_and_quarter(
     client: TestClient,
 ) -> None:
     month_response = client.get(
@@ -314,8 +336,8 @@ def test_export_report_html_chart_title_is_by_week_for_month_and_quarter(
 
     assert month_response.status_code == 200
     assert quarter_response.status_code == 200
-    assert "By week" in month_response.text
-    assert "By week" in quarter_response.text
+    assert "Entries per week" in month_response.text
+    assert "Entries per week" in quarter_response.text
 
 
 # --- report.md ------------------------------------------------------------------------------
@@ -659,12 +681,14 @@ def test_export_report_html_category_color_passes_through_raw_hex(client: TestCl
     assert "#aabbcc" in html_response.text.lower()
 
 
-# --- segmented-bar widths ------------------------------------------------------------------
+# --- segmented-bar proportions (flex-based markup) ------------------------------------------
 
 
-def test_export_report_html_segmented_bar_widths_sum_to_about_100_percent(
+def test_export_report_html_segmented_bar_flex_grow_values_sum_to_about_100(
     client: TestClient,
 ) -> None:
+    """The segmented bar is now a flex row (``flex-grow: N`` per segment div, rounded percent),
+    not an HTML ``width="N%"`` attribute -- assert the flex-grow values still sum to ~100."""
     cat1 = _make_category(client, "Dominant")
     cat2 = _make_category(client, "Tiny")
     _make_entry(
@@ -683,13 +707,14 @@ def test_export_report_html_segmented_bar_widths_sum_to_about_100_percent(
     assert response.status_code == 200
     body = response.text
     category_section = body.split("By category")[1].split("By tag")[0]
-    widths = [int(w) for w in re.findall(r'width="(\d+)%"', category_section)]
-    assert widths, "expected at least one segmented-bar width cell"
+    bar_section = category_section.split('<div class="seg-bar">')[1].split("</div>")[0]
+    values = [int(v) for v in re.findall(r"flex-grow: (\d+)", bar_section)]
+    assert values, "expected at least one segmented-bar flex-grow value"
     # Allow rounding slack: each of N segments can be off by up to 1% from flooring/rounding.
-    assert abs(sum(widths) - 100) <= len(widths)
+    assert abs(sum(values) - 100) <= len(values)
 
 
-def test_export_report_html_tiny_segment_does_not_collapse_to_zero_width(
+def test_export_report_html_tiny_segment_does_not_collapse_to_zero_flex_grow(
     client: TestClient,
 ) -> None:
     cat1 = _make_category(client, "Dominant")
@@ -710,9 +735,10 @@ def test_export_report_html_tiny_segment_does_not_collapse_to_zero_width(
     assert response.status_code == 200
     body = response.text
     category_section = body.split("By category")[1].split("By tag")[0]
-    widths = [int(w) for w in re.findall(r'width="(\d+)%"', category_section)]
-    # "Tiny" is far under 1% of the total, but a nonzero-minutes segment is floored at 1% width.
-    assert min(widths) >= 1
+    bar_section = category_section.split('<div class="seg-bar">')[1].split("</div>")[0]
+    values = [int(v) for v in re.findall(r"flex-grow: (\d+)", bar_section)]
+    # "Tiny" is far under 1% of the total, but a nonzero-minutes segment is floored at flex-grow 1.
+    assert min(values) >= 1
 
 
 # --- section order -------------------------------------------------------------------------
@@ -863,10 +889,14 @@ def test_export_backup_regression_media_type_and_filename_shape_unchanged(
     assert response.content.startswith(SQLITE_MAGIC_HEADER)
 
 
-# --- Outlook-safety invariants ----------------------------------------------------------------
+# --- self-contained-document invariants (no Outlook constraint anymore) -----------------------
 
 
-def test_export_report_html_outlook_safety_no_disallowed_constructs(client: TestClient) -> None:
+def test_export_report_html_document_is_self_contained(client: TestClient) -> None:
+    """The HTML export intentionally uses ``<style>``/``<svg>`` (the Outlook-compatibility
+    constraint was dropped by explicit decision), but the document must still be fully
+    self-contained: no external stylesheet/font/image/script URLs, no remote ``src``/``href``, and
+    no ``<script>`` tag."""
     category_id = _make_category(client, "Deep Work")
     tag_id = _make_tag(client, "focus")
     _make_entry(
@@ -881,10 +911,455 @@ def test_export_report_html_outlook_safety_no_disallowed_constructs(client: Test
     response = client.get("/exports/report.html", params={"period": "week", "date": "2026-07-15"})
 
     body = response.text
-    assert "<style" not in body
-    assert "<svg" not in body
     assert "<script" not in body
+    assert "<link" not in body
+    assert re.search(r'(?:src|href)\s*=\s*["\']https?://', body) is None
+    assert "@import" not in body
     assert "var(" not in body
-    body_lower = body.lower()
-    for retired_color in ("#4c6ef5", "#37b24d", "#f59f00"):
-        assert retired_color not in body_lower
+
+
+# --- stacked "Hours by category" chart -------------------------------------------------------
+
+
+def test_export_report_html_stacked_chart_segments_use_resolved_category_colors_and_order(
+    client: TestClient,
+) -> None:
+    """Each bucket's stack segments must carry the resolved hex color for their category, in the
+    same order as ``summary.by_category`` (total minutes descending)."""
+    dominant = client.post("/categories", json={"name": "Dominant", "color": "blue"}).json()["id"]
+    minor = client.post("/categories", json={"name": "Minor", "color": "green"}).json()["id"]
+    _make_entry(
+        client,
+        "Big",
+        "2026-07-15T08:00:00+00:00",
+        "2026-07-15T12:00:00+00:00",
+        category_id=dominant,
+    )
+    _make_entry(
+        client,
+        "Small",
+        "2026-07-15T13:00:00+00:00",
+        "2026-07-15T13:30:00+00:00",
+        category_id=minor,
+    )
+
+    response = client.get("/exports/report.html", params={"period": "week", "date": "2026-07-15"})
+
+    assert response.status_code == 200
+    body = response.text
+    chart_section = body.split("Hours by category")[1].split("Entries per")[0]
+    blue_index = chart_section.index(CAT_PALETTE["blue"])
+    green_index = chart_section.index(CAT_PALETTE["green"])
+    assert blue_index < green_index
+
+
+def test_export_report_html_stacked_chart_week_period_has_seven_zero_filled_columns(
+    client: TestClient,
+) -> None:
+    """A ``week`` period must render 7 day columns even though only some days have entries --
+    ``by_day`` is sparse from the API and the exporter zero-fills it, mirroring the app."""
+    category_id = _make_category(client, "Deep Work")
+    _make_entry(
+        client,
+        "Entry",
+        "2026-07-15T10:00:00+00:00",
+        "2026-07-15T11:00:00+00:00",
+        category_id=category_id,
+    )
+
+    response = client.get("/exports/report.html", params={"period": "week", "date": "2026-07-15"})
+
+    assert response.status_code == 200
+    body = response.text
+    chart_section = body.split("Hours by category")[1].split("Entries per")[0]
+    assert chart_section.count('<div class="column"') == 7
+
+
+def test_export_report_html_stacked_chart_month_period_buckets_by_week(
+    client: TestClient,
+) -> None:
+    """``month``/``quarter`` periods bucket by week, not by day -- the other branch of every chart
+    helper."""
+    category_id = _make_category(client, "Deep Work")
+    _make_entry(
+        client,
+        "Entry",
+        "2026-07-15T10:00:00+00:00",
+        "2026-07-15T11:00:00+00:00",
+        category_id=category_id,
+    )
+
+    response = client.get("/exports/report.html", params={"period": "month", "date": "2026-07-15"})
+
+    assert response.status_code == 200
+    body = response.text
+    chart_section = body.split("Hours by category")[1].split("Entries per")[0]
+    count_chart_section = body.split("Entries per")[1]
+    column_count = chart_section.count('<div class="column"')
+    marker_count = count_chart_section.count('class="marker"')
+    assert column_count != 7
+    assert 1 <= column_count <= 6
+    assert column_count == marker_count
+
+
+# --- "Entries per day/week" line chart ---------------------------------------------------------
+
+
+def test_export_report_html_count_chart_point_count_matches_zero_filled_days(
+    client: TestClient,
+) -> None:
+    category_id = _make_category(client, "Deep Work")
+    _make_entry(
+        client,
+        "Entry",
+        "2026-07-15T10:00:00+00:00",
+        "2026-07-15T11:00:00+00:00",
+        category_id=category_id,
+    )
+
+    response = client.get("/exports/report.html", params={"period": "week", "date": "2026-07-15"})
+
+    assert response.status_code == 200
+    count_chart_section = response.text.split("Entries per")[1]
+    assert count_chart_section.count('class="marker"') == 7
+
+
+# --- edge cases: zero entries, zero-minute bucket, single bucket, special characters -----------
+
+
+@pytest.mark.parametrize("period", ["week", "month", "quarter"])
+def test_export_report_html_zero_entries_renders_without_error(
+    client: TestClient, period: str
+) -> None:
+    response = client.get("/exports/report.html", params={"period": period, "date": "2026-07-15"})
+
+    assert response.status_code == 200
+    assert "No entries." in response.text
+    assert "<table" not in response.text
+
+
+@pytest.mark.parametrize("period", ["week", "month", "quarter"])
+def test_export_report_md_zero_entries_renders_without_error(
+    client: TestClient, period: str
+) -> None:
+    response = client.get("/exports/report.md", params={"period": period, "date": "2026-07-15"})
+
+    assert response.status_code == 200
+    assert "No entries." in response.text
+
+
+@pytest.mark.parametrize("period", ["week", "month", "quarter"])
+def test_export_report_pdf_zero_entries_renders_without_raising(
+    client: TestClient, period: str
+) -> None:
+    response = client.get("/exports/report.pdf", params={"period": period, "date": "2026-07-15"})
+
+    assert response.status_code == 200
+    assert response.content.startswith(PDF_MAGIC_HEADER)
+
+
+def test_export_report_html_zero_total_bucket_does_not_raise_zero_division(
+    client: TestClient,
+) -> None:
+    """A single entry means most buckets in the period have zero total minutes -- the stacked
+    chart's ``stack_height`` and per-segment ``flex-grow`` math must not divide by zero."""
+    category_id = _make_category(client, "Deep Work")
+    _make_entry(
+        client,
+        "Only entry",
+        "2026-01-01T10:00:00+00:00",
+        "2026-01-01T11:00:00+00:00",
+        category_id=category_id,
+    )
+
+    response = client.get(
+        "/exports/report.html", params={"period": "quarter", "date": "2026-01-15"}
+    )
+
+    assert response.status_code == 200
+
+
+def test_export_report_pdf_zero_total_bucket_does_not_raise_zero_division(
+    client: TestClient,
+) -> None:
+    category_id = _make_category(client, "Deep Work")
+    _make_entry(
+        client,
+        "Only entry",
+        "2026-01-01T10:00:00+00:00",
+        "2026-01-01T11:00:00+00:00",
+        category_id=category_id,
+    )
+
+    response = client.get("/exports/report.pdf", params={"period": "quarter", "date": "2026-01-15"})
+
+    assert response.status_code == 200
+    assert response.content.startswith(PDF_MAGIC_HEADER)
+
+
+def test_export_report_html_single_bucket_does_not_raise(client: TestClient) -> None:
+    """A single-day ``week`` report still has 7 zero-filled buckets, but a narrow custom range
+    isn't available here -- exercise the N=1 polyline branch indirectly via a week with all
+    activity concentrated in one bucket to ensure the ``len(coords) > 1`` guard is safe either
+    way."""
+    category_id = _make_category(client, "Deep Work")
+    _make_entry(
+        client,
+        "Entry",
+        "2026-07-15T10:00:00+00:00",
+        "2026-07-15T11:00:00+00:00",
+        category_id=category_id,
+    )
+
+    response = client.get("/exports/report.html", params={"period": "week", "date": "2026-07-15"})
+
+    assert response.status_code == 200
+
+
+@pytest.mark.parametrize(
+    ("category_name", "tag_name"),
+    [
+        ('<b>Deep</b> & "Work" | Tag', "<i>focus</i>"),
+        ("Café ☕ 日本語", "日本語タグ"),
+    ],
+)
+def test_export_report_html_escapes_special_characters_in_names(
+    client: TestClient, category_name: str, tag_name: str
+) -> None:
+    category_id = _make_category(client, category_name)
+    tag_id = _make_tag(client, tag_name)
+    _make_entry(
+        client,
+        "Entry",
+        "2026-07-15T10:00:00+00:00",
+        "2026-07-15T11:00:00+00:00",
+        category_id=category_id,
+        tag_ids=[tag_id],
+    )
+
+    response = client.get("/exports/report.html", params={"period": "week", "date": "2026-07-15"})
+
+    assert response.status_code == 200
+    body = response.text
+    assert "<b>" not in body
+    assert "<i>" not in body
+    assert escape(category_name) in body
+    assert escape(f"#{tag_name}") in body
+
+
+@pytest.mark.parametrize(
+    ("category_name", "tag_name"),
+    [
+        ("Foo | Bar & <Baz>", "Tag | Pipe"),
+        ("Café ☕ 日本語", "日本語タグ"),
+    ],
+)
+def test_export_report_md_escapes_pipes_in_names(
+    client: TestClient, category_name: str, tag_name: str
+) -> None:
+    category_id = _make_category(client, category_name)
+    tag_id = _make_tag(client, tag_name)
+    _make_entry(
+        client,
+        "Entry",
+        "2026-07-15T10:00:00+00:00",
+        "2026-07-15T11:00:00+00:00",
+        category_id=category_id,
+        tag_ids=[tag_id],
+    )
+
+    response = client.get("/exports/report.md", params={"period": "week", "date": "2026-07-15"})
+
+    assert response.status_code == 200
+    body = response.text
+    escaped_name = category_name.replace("|", "\\|")
+    assert escaped_name in body
+
+
+@pytest.mark.parametrize(
+    ("category_name", "tag_name"),
+    [
+        ('<b>Deep</b> & "Work" | Tag', "<i>focus</i>"),
+        ("Café ☕ 日本語", "日本語タグ"),
+    ],
+)
+def test_export_report_pdf_special_characters_degrade_via_pdf_safe_without_raising(
+    client: TestClient, category_name: str, tag_name: str
+) -> None:
+    """PDF rendering must degrade non-Latin-1 (and any otherwise problematic) characters via
+    ``_pdf_safe`` rather than raise ``FPDFUnicodeEncodingException`` or any other error."""
+    category_id = _make_category(client, category_name)
+    tag_id = _make_tag(client, tag_name)
+    _make_entry(
+        client,
+        "Entry",
+        "2026-07-15T10:00:00+00:00",
+        "2026-07-15T11:00:00+00:00",
+        category_id=category_id,
+        tag_ids=[tag_id],
+    )
+
+    response = client.get("/exports/report.pdf", params={"period": "week", "date": "2026-07-15"})
+
+    assert response.status_code == 200
+    assert response.content.startswith(PDF_MAGIC_HEADER)
+
+
+# --- code-review regression: tag legend cap, PDF bar overflow, markdown narrative escaping ------
+
+
+def test_export_report_tag_legend_capped_at_five_with_more_indicator(client: TestClient) -> None:
+    """``ReportsPage.tsx`` caps the "By tag" legend at the top 5 (``visibleLimit={5}``) with a
+    "+N more tags" line; the exports must match, in all three formats, so a report with many tags
+    doesn't dump an unbounded legend (and, in the PDF, doesn't blow the two-column top row's
+    height estimate -- see the next test)."""
+    category_id = _make_category(client, "Deep Work")
+    tag_ids = [_make_tag(client, f"tag{i}") for i in range(8)]
+    # Descending durations so segment order (by total_minutes desc) is deterministic: tag0..tag4
+    # visible, tag5..tag7 hidden behind "+ 3 more tags".
+    for index, tag_id in enumerate(tag_ids):
+        minutes = 40 - index * 5
+        start_hour = index
+        _make_entry(
+            client,
+            f"Entry {index}",
+            f"2026-07-15T{start_hour:02d}:00:00+00:00",
+            f"2026-07-15T{start_hour:02d}:{minutes:02d}:00+00:00",
+            category_id=category_id,
+            tag_ids=[tag_id],
+        )
+
+    html_response = client.get(
+        "/exports/report.html", params={"period": "week", "date": "2026-07-15"}
+    )
+    assert html_response.status_code == 200
+    html_body = html_response.text
+    tag_html_section = html_body.split("By tag")[1].split("Hours by category")[0]
+    for index in range(5):
+        assert f"tag{index}" in tag_html_section
+    for index in range(5, 8):
+        assert f"tag{index}" not in tag_html_section
+    assert "+ 3 more tags" in tag_html_section
+
+    md_response = client.get("/exports/report.md", params={"period": "week", "date": "2026-07-15"})
+    assert md_response.status_code == 200
+    md_body = md_response.text
+    tag_md_section = md_body.split("## By tag")[1].split("## Hours by category")[0]
+    for index in range(5):
+        assert f"tag{index}" in tag_md_section
+    for index in range(5, 8):
+        assert f"tag{index}" not in tag_md_section
+    assert "+ 3 more tags" in tag_md_section
+
+    pdf_response = client.get(
+        "/exports/report.pdf", params={"period": "week", "date": "2026-07-15"}
+    )
+    assert pdf_response.status_code == 200
+    assert pdf_response.content.startswith(PDF_MAGIC_HEADER)
+
+
+def test_export_report_pdf_two_column_row_falls_back_to_stacked_when_it_would_overflow(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Regression test for the silent-truncation bug: with ``auto_page_break`` disabled for the
+    two-column top row, content drawn past the physical page bottom used to vanish with no
+    exception and no artifact. Enough categories (uncapped, unlike tags) make the "By category"
+    breakdown taller than the space actually available for the row, which must now trigger the
+    stacked (``_pdf_card``, full-width) fallback instead of drawing side-by-side and silently
+    dropping content. Assert every ``rect()`` card border drawn is full content width -- i.e. the
+    fallback path, not two half-width cards -- and that the response still renders successfully."""
+    from fpdf import FPDF
+
+    category_ids = [_make_category(client, f"Category {i}") for i in range(60)]
+    for index, category_id in enumerate(category_ids):
+        hour = index % 24
+        minute = (index // 24) * 2
+        _make_entry(
+            client,
+            f"Entry {index}",
+            f"2026-07-15T{hour:02d}:{minute:02d}:00+00:00",
+            f"2026-07-15T{hour:02d}:{minute + 1:02d}:00+00:00",
+            category_id=category_id,
+        )
+
+    recorded_rects: list[tuple[float, float, float, float]] = []
+    original_rect = FPDF.rect
+
+    def _recording_rect(
+        self: FPDF, x: float, y: float, w: float, h: float, *args: object, **kwargs: object
+    ) -> object:
+        recorded_rects.append((x, y, w, h))
+        return original_rect(self, x, y, w, h, *args, **kwargs)
+
+    monkeypatch.setattr(FPDF, "rect", _recording_rect)
+
+    response = client.get("/exports/report.pdf", params={"period": "week", "date": "2026-07-15"})
+
+    assert response.status_code == 200
+    assert response.content.startswith(PDF_MAGIC_HEADER)
+    # Card border rects are drawn with style="D" -- fpdf2 doesn't surface style back to us via
+    # this monkeypatch, but a fallback (stacked) card border is always full content width, while a
+    # side-by-side card border is always half that (minus the gutter); assert none of the two
+    # tallest/first rects drawn is a half-width card border, i.e. the row did NOT draw side by
+    # side.
+    content_width = 210.0 - 2 * 15.0
+    half_width_ish = content_width / 2
+    early_widths = [w for _, _, w, h in recorded_rects[:4] if h > 20]
+    assert not any(abs(w - half_width_ish) < 1.0 for w in early_widths), (
+        f"expected the two-column row to fall back to stacked full-width cards, but found a "
+        f"half-width card border among the first rects: {early_widths}"
+    )
+
+
+def test_export_report_pdf_segmented_bar_widths_never_exceed_available_width() -> None:
+    """Unit-level regression test for the PDF-only overflow bug: ``max(1.0, ...)`` floors a tiny
+    segment's width up but never reclaims the extra from the rest, so the unfloored widths (which
+    already sum to exactly ``width``, since percentages sum to 100) could add up to more than
+    ``width`` and draw past the card's right edge. ``_pdf_segment_bar_widths`` must keep the total
+    at or under ``width`` regardless of how small one segment's share is, while still keeping
+    every nonzero segment visible (width > 0)."""
+    from app.routers.exports import Segment, _pdf_segment_bar_widths
+
+    width = 84.0
+    segments = [
+        Segment(label="Dominant", minutes=1430, percent=99.3, color="#111111"),
+        Segment(label="Tiny", minutes=10, percent=0.7, color="#222222"),
+    ]
+
+    widths = _pdf_segment_bar_widths(segments, width)
+
+    assert sum(widths) <= width + 1e-6
+    assert all(w > 0 for w in widths), "a nonzero-minutes segment must stay visible"
+
+
+def test_export_report_markdown_narrative_escapes_pipe_and_neutralizes_newline(
+    client: TestClient,
+) -> None:
+    """``build_narrative`` interpolates raw category/tag names into ``narrative``/``highlights``,
+    which ``_render_report_markdown`` used to write straight into the ``## Summary`` section
+    unescaped -- a category name containing ``|`` could corrupt Markdown table-adjacent parsing,
+    and an embedded newline could start a new Markdown block (e.g. inject a fake heading) inside
+    the Summary section. Both must be neutralized."""
+    category_name = "Weird | Name\nInjected # Heading"
+    category_id = _make_category(client, category_name)
+    _make_entry(
+        client,
+        "Entry",
+        "2026-07-15T10:00:00+00:00",
+        "2026-07-15T11:00:00+00:00",
+        category_id=category_id,
+    )
+
+    response = client.get("/exports/report.md", params={"period": "week", "date": "2026-07-15"})
+
+    assert response.status_code == 200
+    body = response.text
+    summary_section = body.split("## Summary", 1)[1]
+
+    assert "Weird \\| Name Injected # Heading" in summary_section
+    assert "Weird | Name\nInjected # Heading" not in summary_section
+    for line in summary_section.splitlines():
+        stripped = line.strip()
+        assert not stripped.startswith("# Injected"), (
+            f"a raw newline from the category name leaked into a Markdown heading line: {line!r}"
+        )
