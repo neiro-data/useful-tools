@@ -179,7 +179,7 @@ describe("ReportsPage", () => {
     render(<ReportsPage />);
 
     // Every weekday in the range is labeled, including days absent from `by_day` (zero-filled).
-    // Labeled by both `MiniBarChart` and `CountLineChart`, hence `getAllByText`.
+    // Labeled by both `StackedCategoryChart` and `CountLineChart`, hence `getAllByText`.
     for (const label of ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]) {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     }
@@ -216,6 +216,26 @@ describe("ReportsPage", () => {
 
     expect(screen.getAllByText("CW 23").length).toBeGreaterThan(0);
     expect(screen.getAllByText("CW 24").length).toBeGreaterThan(0);
+  });
+
+  it("renders exactly two chart cards (Hours by category + Entries per day/week), no neutral MiniBarChart card", () => {
+    mockHook({
+      summary: makeSummary({
+        period: "week",
+        start_date: "2026-07-06",
+        end_date: "2026-07-12",
+        by_day: [{ date: "2026-07-06", total_minutes: 90, entry_count: 2, by_category: [] }],
+      }),
+      narrative: null,
+    });
+
+    render(<ReportsPage />);
+
+    expect(screen.getByText("Hours by category")).toBeInTheDocument();
+    expect(screen.getByText("Entries per day")).toBeInTheDocument();
+    // Two `<h2 class="narrativeHeading">` chart titles plus the narrative's own "Summary" heading
+    // would make three; without a narrative response here, exactly these two chart headings exist.
+    expect(screen.getAllByRole("heading", { level: 2 })).toHaveLength(2);
   });
 
   it("charts by_week for the quarter period", () => {

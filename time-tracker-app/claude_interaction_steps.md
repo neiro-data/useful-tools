@@ -877,3 +877,17 @@ each serves.
 - Carried forward: `getWeekRange` still hardcodes Monday (pre-existing, still out of scope). The
   category palette's adjacent hues are not all CVD-separable, so the stacked chart leans on legend +
   tooltips + 2px surface gaps as required secondary encoding.
+
+## feat/reports-chart-merge — Reports screen chart rework
+- Removed the unnamed neutral MiniBarChart card from ReportsPage (component kept: Week/Month still
+  use it; ReportsPage still uses barsFromDays/barsFromWeeks for shared bucket labels).
+- StackedCategoryChart absorbed its role: per-column total duration label; `.columns` gap dropped so
+  column centres land at (i+0.5)/N.
+- CountLineChart: points re-centred on the same (i+0.5)/N slots, 180px plot, polyline-only SVG with
+  round HTML markers (SVG circles were being stretched by preserveAspectRatio="none"), visible entry
+  count above each marker with TOP_HEADROOM reserved.
+- Pipeline: react-specialist implemented (+1 orchestrator-caught fix: markers were centred as a
+  label+marker stack, sitting below the polyline), test-automator (+5 tests), code-reviewer.
+  Orchestrator fixed the review's overflow finding (ellipsized `.value` + total in column tooltip).
+- Gates re-run by orchestrator: eslint clean, tsc --noEmit clean, vitest 190 passed. Backend untouched.
+- Not verified: no in-browser visual check (Chrome extension declined); dev stack left running.
