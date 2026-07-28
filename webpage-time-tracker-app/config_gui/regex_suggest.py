@@ -10,6 +10,8 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
+import subprocess  # noqa: S404 - `claude` CLI invoked with a fixed argv, never shell=True
 from dataclasses import dataclass
 
 from config_gui import store
@@ -17,8 +19,10 @@ from config_gui.models import ConfigError, normalize_domain
 
 _CLAUDE_MODEL = "claude-haiku-4-5"
 _TIMEOUT_SECONDS = 15.0
+_CLI_TIMEOUT_SECONDS = 45.0
 _MAX_PATTERN_LENGTH = 200
 _MAX_HINT_LENGTH = 200
+_JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(.*?)\s*```", re.DOTALL)
 
 # A group with a quantifier inside, itself quantified — the classic catastrophic-backtracking
 # shape (`(a+)+`, `(.*)*` ...). Only a heuristic, but cheap and catches the free-text-hint risk.
@@ -33,7 +37,7 @@ _JS_NAMED_GROUP_RE = re.compile(r"\(\?<(?![=!])(\w+)>")
 
 
 class SuggestUnavailable(ConfigError):
-    """Claude suggestion could not be produced — missing key, package, or a failed call."""
+    """Claude suggestion could not be produced — missing CLI/key, package, or a failed call."""
 
 
 @dataclass(frozen=True)
@@ -235,11 +239,96 @@ def _write_cache(cache: dict[str, dict[str, str | None]]) -> None:
         pass
 
 
+def _extract_json(text: str) -> str:
+    """Strip a ```/```json fence and surrounding prose, if any, from Claude's raw text."""
+    match = _JSON_FENCE_RE.search(text)
+    return match.group(1).strip() if match else text.strip()
+
+
+def _claude_cli_text(prompt: str) -> str:
+    """Run the Claude Code CLI non-interactively and return its `result` text."""
+    claude = shutil.which("claude")
+    if claude is None:
+        raise SuggestUnavailable("Claude Code CLI (`claude`) not found on PATH")
+
+    # `--allowed-tools ""` is defense-in-depth for a prompt built partly from a free-text hint,
+    # not a sandbox — the CLI still inherits this process's env, cwd, and permissions.
+    try:
+        proc = subprocess.run(  # noqa: S603 - fixed argv, no shell, no user-controlled binary
+            [
+                claude,
+                "-p",
+                prompt,
+                "--output-format",
+                "json",
+                "--model",
+                _CLAUDE_MODEL,
+                "--allowed-tools",
+                "",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=_CLI_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as err:
+        raise SuggestUnavailable("Claude Code CLI timed out") from err
+    except OSError as err:
+        # `which` only proved the path existed a moment ago — it can still be non-executable,
+        # or vanish. Nothing but `SuggestUnavailable` may escape: the worker thread's only
+        # handler is `except ConfigError`, and anything else kills it with the button stuck.
+        raise SuggestUnavailable(f"Claude Code CLI could not be run: {err}") from err
+
+    if proc.returncode != 0:
+        stderr = proc.stderr.strip()
+        raise SuggestUnavailable(
+            f"Claude Code CLI failed: {stderr}" if stderr else "Claude Code CLI failed"
+        )
+
+    try:
+        envelope = json.loads(proc.stdout)
+    except json.JSONDecodeError as err:
+        raise SuggestUnavailable("Claude Code CLI returned invalid JSON") from err
+
+    result = envelope.get("result") if isinstance(envelope, dict) else None
+    if not isinstance(result, str):
+        raise SuggestUnavailable("Claude Code CLI returned an unexpected response")
+    return result
+
+
+def _claude_sdk_text(prompt: str) -> str:
+    """Fall back to the `anthropic` SDK, used only when the CLI is unavailable."""
+    api_key = os.getenv("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise SuggestUnavailable("ANTHROPIC_API_KEY is not set")
+
+    try:
+        import anthropic
+    except ImportError as err:
+        raise SuggestUnavailable("the anthropic package is not installed") from err
+
+    try:
+        client = anthropic.Anthropic(api_key=api_key, timeout=_TIMEOUT_SECONDS)
+        response = client.messages.create(
+            model=_CLAUDE_MODEL,
+            max_tokens=300,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return "".join(
+            getattr(block, "text", "")
+            for block in response.content
+            if getattr(block, "type", None) == "text"
+        )
+    except Exception as err:  # any SDK/network failure must surface as SuggestUnavailable
+        raise SuggestUnavailable(f"Claude suggestion failed: {err}") from err
+
+
 def suggest_via_claude(domain: str, hint: str | None, *, advanced: bool) -> Suggestion:
     """Ask Claude for a suggestion, using a disk cache; only raises `SuggestUnavailable`.
 
-    Only a `validate()`-passing suggestion is ever cached — an unvalidated response would
-    otherwise be replayed, and fail identically, on every future click.
+    Tries the Claude Code CLI first; falls back to the `anthropic` SDK only if the CLI is
+    unavailable and `ANTHROPIC_API_KEY` is set. Only a `validate()`-passing suggestion is ever
+    cached — an unvalidated response would otherwise be replayed, and fail identically, on every
+    future click.
     """
     cleaned = normalize_domain(domain)
     hint = hint[:_MAX_HINT_LENGTH] if hint else hint
@@ -251,30 +340,18 @@ def suggest_via_claude(domain: str, hint: str | None, *, advanced: bool) -> Sugg
             host=cached.get("host"), path=cached.get("path"), note=cached.get("note") or ""
         )
 
-    api_key = os.getenv("ANTHROPIC_API_KEY")
-    if not api_key:
-        raise SuggestUnavailable("ANTHROPIC_API_KEY is not set")
-
-    try:
-        import anthropic
-    except ImportError as err:
-        raise SuggestUnavailable("the anthropic package is not installed") from err
-
     prompt = _build_prompt(cleaned, hint, advanced=advanced)
     try:
-        client = anthropic.Anthropic(api_key=api_key, timeout=_TIMEOUT_SECONDS)
-        response = client.messages.create(
-            model=_CLAUDE_MODEL,
-            max_tokens=300,
-            messages=[{"role": "user", "content": prompt}],
-        )
-        text = "".join(
-            getattr(block, "text", "")
-            for block in response.content
-            if getattr(block, "type", None) == "text"
-        )
-        payload = json.loads(text)
-    except Exception as err:  # any SDK/network/JSON failure must surface as SuggestUnavailable
+        text = _claude_cli_text(prompt)
+    except SuggestUnavailable:
+        if os.getenv("ANTHROPIC_API_KEY"):
+            text = _claude_sdk_text(prompt)
+        else:
+            raise
+
+    try:
+        payload = json.loads(_extract_json(text))
+    except json.JSONDecodeError as err:
         raise SuggestUnavailable(f"Claude suggestion failed: {err}") from err
 
     if not isinstance(payload, dict) or not {"host", "path", "note"} <= payload.keys():
