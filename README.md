@@ -13,3 +13,11 @@ backend and a **React** single-page app frontend, with no cloud dependency. It s
 against categories and tags, Today/Week/Month views, period Reports (with breakdowns and a narrative
 summary), data Exports (HTML/CSV/SQLite backup), and configurable Settings. See
 [`time-tracker-app/README.md`](time-tracker-app/README.md) for setup and usage.
+
+### [`tool-sql-to-drawio/`](tool-sql-to-drawio/)
+
+A **Python** CLI that turns a PostgreSQL DDL dump (`CREATE TABLE` + foreign-key constraints) into a
+draw.io (`.drawio`) ER diagram. It parses the SQL with `sqlglot` and emits `mxGraphModel` XML in which
+each table is a real draw.io table shape and each foreign key is a crow's-foot edge anchored to the
+individual column rows, not just the table boxes. See
+[`tool-sql-to-drawio/README.md`](tool-sql-to-drawio/README.md) for setup and usage.
