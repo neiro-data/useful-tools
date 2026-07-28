@@ -18,3 +18,23 @@ anchored to individual column rows.
 - Gates re-run by the orchestrator: ruff format/check, mypy, pytest 29/29 clean; end-to-end run on the
   fixture verified 4 table vertices, 18 column rows, 3 column-anchored crow's-foot edges, byte-identical
   across two runs.
+
+## fix/drawio-table-row-format (branched from `tool-sql-to-drawio`)
+
+Purpose: the emitted `.drawio` rendered wrong in app.diagrams.net — every column label drawn rotated 90°
+and overlapping, table rows appearing empty.
+
+- Root cause: `shape=tableRow` cells carried the column label in their own `value` while setting
+  `horizontal=0`. draw.io requires an empty row value plus a child `shape=partialRectangle` part holding
+  the label.
+- Pipeline: plan skipped (bounded to `emitter.py`/`layout.py`, read inline) → `python-pro` implemented →
+  `test-automator` + `code-reviewer` run in parallel → fresh `python-pro` fixed review defects from
+  `handoff-fix-drawio-table-row-format.md`.
+- `code-reviewer` found 2 blockers (label part missing draw.io's canonical style/`alternateBounds`;
+  width heuristic never measured the table header) and 6 should-fix/nit, incl. two unrelated style flips
+  bundled in by the first pass (`bottom=1`→`0` killed row separators, `collapsible=0`→`1` let viewers
+  hide a table's rows). All fixed.
+- Also added per-table width sizing from the longest label (clamped 220–460) with per-grid-column x
+  offsets, and shared `PK_PREFIX`/`FK_PREFIX` constants so label text and width math can't desync.
+- Gates re-run by the orchestrator: ruff format/check, mypy, pytest 38/38 clean; CLI on the fixture
+  byte-identical across two runs. No local drawio renderer — visual check done by Nelson in the browser.
