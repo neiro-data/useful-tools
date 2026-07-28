@@ -15,13 +15,18 @@ from ddl_to_drawio.model import Schema, Table, TableId
 MIN_TABLE_WIDTH = 220
 MAX_TABLE_WIDTH = 460
 PIXELS_PER_CHAR = 7
-LABEL_PADDING = 24
+# A row's total horizontal padding is NAME_PADDING + TYPE_PADDING (32px), replacing the
+# old single 24px LABEL_PADDING, so tables are ~8px wider from padding alone.
+NAME_PADDING = 16
+TYPE_PADDING = 16
+MIN_TYPE_WIDTH = 60
 ROW_HEIGHT = 30
 HEADER_HEIGHT = 30
 HORIZONTAL_GAP = 80
 VERTICAL_GAP = 80
 
-# Shared with emitter._column_label -- the single source of truth for these prefixes.
+# Shared with emitter._column_name_label -- the single source of truth for these prefixes.
+# _table_widths below re-derives the same label-length math and must be kept in sync with it.
 PK_PREFIX = "PK "
 FK_PREFIX = "FK "
 
@@ -29,28 +34,32 @@ FK_PREFIX = "FK "
 _HEADER_WEIGHT = 1.15
 
 
-def _longest_label_length(table: Table, fk_source_columns: set[tuple[TableId, str]]) -> int:
-    """Return the character length of the table's longest rendered column label."""
-    lengths = [0]
+def _table_widths(table: Table, fk_source_columns: set[tuple[TableId, str]]) -> tuple[int, int]:
+    """Compute a table's (name_width, total_width), clamped.
+
+    ``name_width`` sizes the name/prefix sub-column; ``total_width`` sizes the
+    full table box (name sub-column + type sub-column).
+    """
+    name_chars = 0
+    type_chars = 0
     for column in table.columns:
         is_fk = (table.table_id, column.name) in fk_source_columns
         prefix_len = (len(PK_PREFIX) if column.is_primary_key else 0) + (
             len(FK_PREFIX) if is_fk else 0
         )
-        label_len = prefix_len + len(column.name)
-        if column.type_text:
-            label_len += len(column.type_text) + 2
-        lengths.append(label_len)
-    return max(lengths)
+        name_len = prefix_len + len(column.name) + (1 if column.type_text else 0)
+        name_chars = max(name_chars, name_len)
+        type_chars = max(type_chars, len(column.type_text))
 
+    name_width = round(name_chars * PIXELS_PER_CHAR) + NAME_PADDING
+    type_width = round(type_chars * PIXELS_PER_CHAR) + TYPE_PADDING
+    header_width = round(len(str(table.table_id)) * _HEADER_WEIGHT * PIXELS_PER_CHAR) + NAME_PADDING
 
-def _table_width(table: Table, fk_source_columns: set[tuple[TableId, str]]) -> int:
-    """Compute a table's box width from its longest column label, clamped."""
-    column_chars = _longest_label_length(table, fk_source_columns)
-    header_chars = len(str(table.table_id)) * _HEADER_WEIGHT
-    chars = max(column_chars, header_chars)
-    width = round(chars * PIXELS_PER_CHAR + LABEL_PADDING)
-    return max(MIN_TABLE_WIDTH, min(MAX_TABLE_WIDTH, width))
+    total = max(name_width + type_width, header_width, MIN_TABLE_WIDTH)
+    total = max(MIN_TABLE_WIDTH, min(MAX_TABLE_WIDTH, total))
+
+    name_width = max(1, min(name_width, total - MIN_TYPE_WIDTH))
+    return name_width, total
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,6 +70,7 @@ class BoxPosition:
     y: int
     width: int
     height: int
+    name_width: int
 
 
 def compute_layout(schema: Schema) -> dict[TableId, BoxPosition]:
@@ -73,10 +83,12 @@ def compute_layout(schema: Schema) -> dict[TableId, BoxPosition]:
     positions: dict[TableId, BoxPosition] = {}
 
     fk_source_columns = {(fk.source_table, fk.source_column) for fk in schema.foreign_keys}
-    widths = {
-        table_id: _table_width(schema.tables[table_id], fk_source_columns)
-        for table_id in ordered_ids
-    }
+    name_widths: dict[TableId, int] = {}
+    widths: dict[TableId, int] = {}
+    for table_id in ordered_ids:
+        name_width, total_width = _table_widths(schema.tables[table_id], fk_source_columns)
+        name_widths[table_id] = name_width
+        widths[table_id] = total_width
 
     row_heights: dict[int, int] = {}
     grid_column_widths: dict[int, int] = {}
@@ -107,6 +119,8 @@ def compute_layout(schema: Schema) -> dict[TableId, BoxPosition]:
         height = HEADER_HEIGHT + ROW_HEIGHT * max(1, len(table.columns))
         x = x_offsets[col]
         y = y_offsets[row]
-        positions[table_id] = BoxPosition(x=x, y=y, width=widths[table_id], height=height)
+        positions[table_id] = BoxPosition(
+            x=x, y=y, width=widths[table_id], height=height, name_width=name_widths[table_id]
+        )
 
     return positions
