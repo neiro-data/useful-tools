@@ -50,10 +50,12 @@ uv run ddl-to-drawio dump.sql --schema public
 
 ## Output format
 
-Each table becomes an `mxCell` `shape=table` vertex; each column becomes a child `mxCell`
-`shape=tableRow`. Foreign-key edges connect the specific child-column and parent-column cells
-(crow's-foot notation: `endArrow=ERmany;startArrow=ERone`), so relationships stay anchored to the
-correct rows even if you rearrange table boxes in draw.io.
+Each table becomes an `mxCell` `shape=table` vertex with a light grey (`#B8B8B8`) header band;
+each column becomes a child `mxCell` `shape=tableRow` split into a bold name sub-column and a
+regular-weight type sub-column, aligned to the same width within each table. Foreign-key edges
+connect the specific child-column and parent-column cells (crow's-foot notation:
+`endArrow=ERmany;startArrow=ERone`), so relationships stay anchored to the correct rows even if
+you rearrange table boxes in draw.io.
 
 Open the generated `.drawio` file directly in [draw.io](https://app.diagrams.net/) (or the
 desktop app) via File → Open.

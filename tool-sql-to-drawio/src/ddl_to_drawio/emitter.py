@@ -56,15 +56,22 @@ def _foreign_key_cell_id(
     )
 
 
-def _column_label(name: str, type_text: str, *, is_pk: bool, is_fk: bool) -> str:
+_PART_STYLE = (
+    "shape=partialRectangle;connectable=0;fillColor=none;"
+    "top=0;left=0;bottom=0;right=0;align=left;verticalAlign=middle;"
+    "spacingLeft=6;spacingRight=6;overflow=hidden;whiteSpace=wrap;html=1;"
+)
+
+
+def _column_name_label(name: str, *, is_pk: bool, is_fk: bool, has_type: bool) -> str:
     prefix = ""
     if is_pk:
         prefix += PK_PREFIX
     if is_fk:
         prefix += FK_PREFIX
     label = f"{prefix}{name}"
-    if type_text:
-        label = f"{label}: {type_text}"
+    if has_type:
+        label = f"{label}:"
     return label
 
 
@@ -119,7 +126,7 @@ def build_mxgraph_xml(schema: Schema) -> str:
                 "style": (
                     "shape=table;startSize=30;container=1;collapsible=0;"
                     "childLayout=tableLayout;fixedRows=1;rowLines=0;fontStyle=1;"
-                    "align=center;resizeLast=1;html=1;fillColor=none;"
+                    "align=center;resizeLast=1;html=1;fillColor=#B8B8B8;"
                 ),
                 "vertex": "1",
                 "parent": "1",
@@ -140,8 +147,11 @@ def build_mxgraph_xml(schema: Schema) -> str:
         for index, column in enumerate(table.columns):
             column_cell_id = _column_cell_id(table_id, column.name)
             is_fk = (table_id, column.name) in fk_source_columns
-            label = _column_label(
-                column.name, column.type_text, is_pk=column.is_primary_key, is_fk=is_fk
+            name_label = _column_name_label(
+                column.name,
+                is_pk=column.is_primary_key,
+                is_fk=is_fk,
+                has_type=bool(column.type_text),
             )
             row_cell = SubElement(
                 root,
@@ -151,7 +161,7 @@ def build_mxgraph_xml(schema: Schema) -> str:
                     "value": "",
                     "style": (
                         "shape=tableRow;horizontal=0;startSize=0;swimlaneHead=0;"
-                        "swimlaneBody=0;fillColor=none;collapsible=0;dropTarget=0;"
+                        "swimlaneBody=0;fillColor=#FFFFFF;collapsible=0;dropTarget=0;"
                         "points=[[0,0.5],[1,0.5]];portConstraint=eastwest;"
                         "top=0;left=0;right=0;bottom=1;html=1;"
                     ),
@@ -170,35 +180,65 @@ def build_mxgraph_xml(schema: Schema) -> str:
                 },
             )
 
-            label_cell = SubElement(
+            type_width = position.width - position.name_width
+
+            name_cell = SubElement(
                 root,
                 "mxCell",
                 {
-                    "id": f"{column_cell_id}-label",
-                    "value": label,
-                    "style": (
-                        "shape=partialRectangle;connectable=0;fillColor=none;"
-                        "top=0;left=0;bottom=0;right=0;align=left;verticalAlign=middle;"
-                        "spacingLeft=6;spacingRight=6;overflow=hidden;whiteSpace=wrap;html=1;"
-                    ),
+                    "id": f"{column_cell_id}-name",
+                    "value": name_label,
+                    "style": f"{_PART_STYLE}fontStyle=1;",
                     "vertex": "1",
                     "parent": column_cell_id,
                 },
             )
-            label_geometry = SubElement(
-                label_cell,
+            name_geometry = SubElement(
+                name_cell,
                 "mxGeometry",
                 {
-                    "width": str(position.width),
+                    "x": "0",
+                    "width": str(position.name_width),
                     "height": str(ROW_HEIGHT),
                     "as": "geometry",
                 },
             )
             SubElement(
-                label_geometry,
+                name_geometry,
                 "mxRectangle",
                 {
-                    "width": str(position.width),
+                    "width": str(position.name_width),
+                    "height": str(ROW_HEIGHT),
+                    "as": "alternateBounds",
+                },
+            )
+
+            type_cell = SubElement(
+                root,
+                "mxCell",
+                {
+                    "id": f"{column_cell_id}-type",
+                    "value": column.type_text,
+                    "style": _PART_STYLE,
+                    "vertex": "1",
+                    "parent": column_cell_id,
+                },
+            )
+            type_geometry = SubElement(
+                type_cell,
+                "mxGeometry",
+                {
+                    "x": str(position.name_width),
+                    "width": str(type_width),
+                    "height": str(ROW_HEIGHT),
+                    "as": "geometry",
+                },
+            )
+            SubElement(
+                type_geometry,
+                "mxRectangle",
+                {
+                    "width": str(type_width),
                     "height": str(ROW_HEIGHT),
                     "as": "alternateBounds",
                 },
