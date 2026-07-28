@@ -8,6 +8,7 @@ from ddl_to_drawio.model import Schema, TableId
 from ddl_to_drawio.parser import DdlParseError, parse_ddl
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample_plants.sql"
+MYSQL_FIXTURE = Path(__file__).parent / "fixtures" / "sample_mysql.sql"
 
 
 def _load_fixture_schema() -> Schema:
@@ -350,3 +351,111 @@ def test_malformed_sql_raises_ddl_parse_error() -> None:
     # Act / Assert
     with pytest.raises(DdlParseError):
         parse_ddl(bad_sql)
+
+
+def test_mysql_dialect_parses_tables_pks_and_fks() -> None:
+    # Arrange
+    sql = MYSQL_FIXTURE.read_text(encoding="utf-8")
+
+    # Act
+    schema = parse_ddl(sql, dialect="mysql")
+
+    # Assert
+    expected = {
+        TableId("public", "plants"),
+        TableId("public", "plant_production"),
+        TableId("public", "plant_maintenance"),
+        TableId("public", "plant_emissions"),
+    }
+    assert set(schema.tables) == expected
+    plants = schema.tables[TableId("public", "plants")]
+    assert next(c for c in plants.columns if c.name == "id").is_primary_key
+    assert len(schema.foreign_keys) == 3
+
+
+def test_parse_ddl_defaults_to_postgres_dialect() -> None:
+    # Arrange
+    sql = FIXTURE.read_text(encoding="utf-8")
+
+    # Act
+    schema_default = parse_ddl(sql)
+    schema_explicit = parse_ddl(sql, dialect="postgres")
+
+    # Assert
+    assert set(schema_default.tables) == set(schema_explicit.tables)
+
+
+def test_unsupported_dialect_raises_ddl_parse_error_naming_allowed_list() -> None:
+    # Act / Assert
+    with pytest.raises(DdlParseError, match="mysql"):
+        parse_ddl("CREATE TABLE t (id INT);", dialect="oracle")
+
+
+def test_trino_dialect_type_reaches_sqlglot_reader() -> None:
+    # Arrange
+    sql = "CREATE TABLE t (id INT, tags ARRAY(VARCHAR));"
+
+    # Act
+    schema = parse_ddl(sql, dialect="trino")
+
+    # Assert
+    table = schema.tables[TableId("public", "t")]
+    tags = next(c for c in table.columns if c.name == "tags")
+    assert "ARRAY" in tags.type_text.upper()
+
+
+def test_duckdb_dialect_type_reaches_sqlglot_reader() -> None:
+    # Arrange
+    sql = "CREATE TABLE t (id INT, tags INT[]);"
+
+    # Act
+    schema = parse_ddl(sql, dialect="duckdb")
+
+    # Assert
+    table = schema.tables[TableId("public", "t")]
+    tags = next(c for c in table.columns if c.name == "tags")
+    assert "[]" in tags.type_text or "ARRAY" in tags.type_text.upper()
+
+
+@pytest.mark.parametrize("dialect", ["trino", "presto", "duckdb"])
+def test_dialect_parses_pk_and_fk_end_to_end(dialect: str) -> None:
+    # Arrange: table-level PRIMARY KEY + inline FOREIGN KEY, as these
+    # dialects commonly express constraints (no MySQL-style inline REFERENCES).
+    sql = """
+    CREATE TABLE parent (id INTEGER, name VARCHAR, PRIMARY KEY (id));
+    CREATE TABLE child (
+        id INTEGER,
+        parent_id INTEGER,
+        PRIMARY KEY (id),
+        FOREIGN KEY (parent_id) REFERENCES parent(id)
+    );
+    """
+
+    # Act
+    schema = parse_ddl(sql, dialect=dialect)
+
+    # Assert
+    parent = schema.tables[TableId("public", "parent")]
+    child = schema.tables[TableId("public", "child")]
+    assert next(c for c in parent.columns if c.name == "id").is_primary_key
+    assert next(c for c in child.columns if c.name == "id").is_primary_key
+    assert len(schema.foreign_keys) == 1
+    fk = schema.foreign_keys[0]
+    assert fk.source_table == TableId("public", "child")
+    assert fk.source_column == "parent_id"
+    assert fk.target_table == TableId("public", "parent")
+    assert fk.target_column == "id"
+
+
+def test_presto_dialect_parses_tables_and_types() -> None:
+    # Presto had zero direct coverage; verify it isn't silently dropping tables/types.
+    sql = "CREATE TABLE t (id INTEGER, tags ARRAY(VARCHAR));"
+
+    # Act
+    schema = parse_ddl(sql, dialect="presto")
+
+    # Assert
+    table = schema.tables[TableId("public", "t")]
+    assert {c.name for c in table.columns} == {"id", "tags"}
+    tags = next(c for c in table.columns if c.name == "tags")
+    assert "ARRAY" in tags.type_text.upper()

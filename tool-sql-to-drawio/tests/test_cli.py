@@ -10,6 +10,7 @@ import pytest
 from ddl_to_drawio.cli import main
 
 FIXTURE = Path(__file__).parent / "fixtures" / "sample_plants.sql"
+MYSQL_FIXTURE = Path(__file__).parent / "fixtures" / "sample_mysql.sql"
 
 
 def test_stdin_stdout_round_trip(
@@ -68,3 +69,24 @@ def test_writes_drawio_file_with_default_output_name(tmp_path: Path) -> None:
     assert exit_code == 0
     assert expected_output.exists()
     assert "<mxfile" in expected_output.read_text(encoding="utf-8")
+
+
+def test_mysql_dialect_flag_produces_xml_on_stdout(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    # Act
+    exit_code = main([str(MYSQL_FIXTURE), "--dialect", "mysql", "-o", "-"])
+
+    # Assert
+    assert exit_code == 0
+    out = capsys.readouterr().out
+    assert "<mxfile" in out
+
+
+def test_invalid_dialect_exits_with_code_two(capsys: pytest.CaptureFixture[str]) -> None:
+    # Act / Assert
+    with pytest.raises(SystemExit) as exc_info:
+        main([str(FIXTURE), "--dialect", "oracle", "-o", "-"])
+
+    assert exc_info.value.code == 2
+    assert "invalid choice" in capsys.readouterr().err.lower()

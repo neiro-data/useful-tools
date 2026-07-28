@@ -2,9 +2,9 @@
 
 ## Resume
 
-CLI that converts a PostgreSQL DDL dump into a draw.io (`.drawio`) ER diagram, with FK edges
-anchored to individual column rows (not just table boxes). Stack: Python 3.11+, `uv`, `sqlglot`
-(parsing), `xml.etree.ElementTree` (emission). Run: `uv sync`, then
+CLI that converts a SQL DDL dump (PostgreSQL, MySQL, Trino, Presto, or DuckDB) into a draw.io
+(`.drawio`) ER diagram, with FK edges anchored to individual column rows (not just table boxes).
+Stack: Python 3.11+, `uv`, `sqlglot` (parsing), `xml.etree.ElementTree` (emission). Run: `uv sync`, then
 `uv run ddl-to-drawio tests/fixtures/sample_plants.sql`. Tests: `uv run pytest`.
 
 ## Install
@@ -27,12 +27,21 @@ cat dump.sql | uv run ddl-to-drawio - -o -
 
 # only include one schema
 uv run ddl-to-drawio dump.sql --schema public
+
+# parse a non-PostgreSQL dialect
+uv run ddl-to-drawio dump.sql --dialect mysql
 ```
 
 ## Supported DDL / limitations
 
-- Dialect: PostgreSQL (parsed via `sqlglot(read="postgres")`), AST-based — no regex on the main
-  parse path.
+- Dialects: `postgres` (default), `mysql`, `trino`, `presto`, `duckdb`, selected via `--dialect`
+  (lowercase, e.g. `--dialect mysql` — not `MySQL`) and passed straight to `sqlglot(read=...)`,
+  AST-based — no regex on the main parse path.
+  Dialects without schema qualification (e.g. MySQL) land under the default schema `public`.
+- FK edges are only drawn for `FOREIGN KEY ... REFERENCES` constraints actually present in the
+  DDL. Trino/Presto/DuckDB DDL typically omits FK constraints because those engines don't enforce
+  them, so diagrams generated from those dialects are often tables-only — that's a property of the
+  source DDL, not a limitation of this tool.
 - `CREATE TABLE` columns, types, `NOT NULL`, `PRIMARY KEY` (inline and table-level), `UNIQUE`.
 - Foreign keys in all three common forms found in real pg_dump output: out-of-line
   `ALTER TABLE ONLY ... ADD CONSTRAINT ... FOREIGN KEY ... REFERENCES ...`, inline column-level

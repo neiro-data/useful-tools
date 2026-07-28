@@ -65,3 +65,28 @@ types aligned into their own sub-column within each table.
   `<=` assertion in the desync-guard test that would pass on an undercount → tightened to `==`), 2 nits.
 - Gates re-run by the orchestrator: ruff format/check, mypy, pytest 46/46 clean; CLI byte-identical
   across two runs. Emitted XML spot-checked. Visual confirmation is Nelson's in app.diagrams.net.
+
+## feat/multi-dialect-parsing (branched from `tool-sql-to-drawio`, after PR#1 merged)
+
+Purpose: PR#2 of two — drop the hardcoded PostgreSQL assumption; accept a `--dialect` flag.
+
+- `parser.py` hardcoded postgres in two places: `sqlglot.parse(sql, read="postgres")` and
+  `kind.sql(dialect="postgres")`. Both now take a keyword-only `dialect` threaded through
+  `parse_ddl → _parse_create_table → _column_type_text`.
+- `SUPPORTED_DIALECTS = (postgres, mysql, trino, presto, duckdb)`, default postgres. CLI `--dialect`
+  uses argparse `choices` (exit 2 on bad input); `parse_ddl` re-validates for library callers.
+- `DEFAULT_SCHEMA = "public"` deliberately unchanged — dialects without schema qualification land
+  under `public`; documented in the README rather than special-cased.
+- Pipeline: plan skipped (scoped in the approved plan, parser/cli read inline) → `python-pro`
+  implemented → `test-automator` + `code-reviewer` in parallel → fresh `python-pro` applied fixes from
+  `handoff-feat-multi-dialect-parsing.md` (scratchpad, not the repo).
+- `test-automator` found no defects; confirmed postgres output byte-identical to pre-change via
+  `git stash`, and that all five dialects parse PK/FK end-to-end (sqlglot's constraint AST is
+  dialect-independent). Added parametrized trino/presto/duckdb end-to-end tests — presto had zero
+  direct coverage before.
+- `code-reviewer` raised 1 blocker on dialect honesty: real Trino/Presto/DuckDB DDL rarely carries FK
+  constraints, so those diagrams come out tables-only with no explanation. Resolved as a README caveat.
+  Its suggested stderr warning was rejected — it can't tell "no FKs in schema" from "dialect can't
+  express FKs" and would fire on legitimate FK-free schemas.
+- Gates re-run by the orchestrator: ruff format/check, mypy, pytest 57/57 clean; MySQL fixture emits
+  4 tables + 3 FK edges; `grep '"postgres"' src/` shows only the two constants.
