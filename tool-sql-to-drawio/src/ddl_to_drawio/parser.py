@@ -1,4 +1,4 @@
-"""Parse a PostgreSQL DDL dump into the plain dataclass model.
+"""Parse a DDL dump into the plain dataclass model.
 
 Uses sqlglot to build an AST and walks it directly -- no regex on the main parse path.
 """
@@ -14,6 +14,8 @@ from sqlglot import exp
 from ddl_to_drawio.model import Column, ForeignKey, Schema, Table, TableId
 
 DEFAULT_SCHEMA = "public"
+DEFAULT_DIALECT = "postgres"
+SUPPORTED_DIALECTS: tuple[str, ...] = ("postgres", "mysql", "trino", "presto", "duckdb")
 
 
 class DdlParseError(Exception):
@@ -51,14 +53,14 @@ def _table_id(table: exp.Table) -> TableId:
     return TableId(schema=schema, name=name)
 
 
-def _column_type_text(column_def: exp.ColumnDef) -> str:
+def _column_type_text(column_def: exp.ColumnDef, dialect: str) -> str:
     kind = column_def.args.get("kind")
     if kind is None:
         return ""
-    return str(kind.sql(dialect="postgres"))
+    return str(kind.sql(dialect=dialect))
 
 
-def _parse_create_table(create: exp.Create) -> Table:
+def _parse_create_table(create: exp.Create, dialect: str) -> Table:
     schema_expr = create.this
     if isinstance(schema_expr, exp.Schema):
         table_expr = schema_expr.this
@@ -109,7 +111,7 @@ def _parse_create_table(create: exp.Create) -> Table:
         table.columns.append(
             Column(
                 name=name,
-                type_text=_column_type_text(entry),
+                type_text=_column_type_text(entry, dialect),
                 not_null=not_null,
                 is_primary_key=is_pk,
                 is_unique=is_unique,
@@ -239,21 +241,34 @@ def _constraint_name(constraint: exp.Constraint) -> str | None:
     return None
 
 
-def parse_ddl(sql: str, schema_filter: str | None = None) -> Schema:
-    """Parse a full PostgreSQL DDL dump into a Schema model.
+def parse_ddl(
+    sql: str, schema_filter: str | None = None, *, dialect: str = DEFAULT_DIALECT
+) -> Schema:
+    """Parse a full DDL dump into a Schema model.
 
     Args:
         sql: The raw DDL text.
         schema_filter: If given, only keep tables belonging to this schema.
+        dialect: The SQL dialect to parse with. Must be one of ``SUPPORTED_DIALECTS``.
+
+    Note:
+        The dialect validation below is unreachable from the CLI (argparse ``choices=``
+        already rejects bad values); it exists to guard direct library/API callers.
 
     Returns:
         The extracted Schema.
 
     Raises:
-        DdlParseError: If sqlglot cannot tokenize/parse the input at all.
+        DdlParseError: If ``dialect`` is unsupported, or if sqlglot cannot
+            tokenize/parse the input at all.
     """
+    if dialect not in SUPPORTED_DIALECTS:
+        raise DdlParseError(
+            f"Unsupported dialect '{dialect}'. Supported dialects: {', '.join(SUPPORTED_DIALECTS)}"
+        )
+
     try:
-        statements = sqlglot.parse(sql, read="postgres")
+        statements = sqlglot.parse(sql, read=dialect)
     except Exception as exc:  # noqa: BLE001 - re-raise as our own error type
         raise DdlParseError(f"Failed to parse DDL: {exc}") from exc
 
@@ -264,7 +279,7 @@ def parse_ddl(sql: str, schema_filter: str | None = None) -> Schema:
         if statement is None:
             continue
         if isinstance(statement, exp.Create) and statement.args.get("kind") == "TABLE":
-            table = _parse_create_table(statement)
+            table = _parse_create_table(statement, dialect)
             if schema_filter and table.table_id.schema != schema_filter:
                 continue
             schema.tables[table.table_id] = table

@@ -7,13 +7,13 @@ import sys
 from pathlib import Path
 
 from ddl_to_drawio.emitter import build_mxgraph_xml
-from ddl_to_drawio.parser import DdlParseError, parse_ddl
+from ddl_to_drawio.parser import DEFAULT_DIALECT, SUPPORTED_DIALECTS, DdlParseError, parse_ddl
 
 
 def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="ddl-to-drawio",
-        description="Convert a PostgreSQL DDL dump into a draw.io ER diagram.",
+        description="Convert a DDL dump into a draw.io ER diagram.",
     )
     parser.add_argument(
         "input",
@@ -30,6 +30,13 @@ def _build_arg_parser() -> argparse.ArgumentParser:
         "--schema",
         default=None,
         help="Only include tables belonging to this schema (e.g. 'public').",
+    )
+    parser.add_argument(
+        "--dialect",
+        choices=SUPPORTED_DIALECTS,
+        default=DEFAULT_DIALECT,
+        help=f"SQL dialect to parse the input with. One of: {', '.join(SUPPORTED_DIALECTS)}. "
+        f"Defaults to '{DEFAULT_DIALECT}'.",
     )
     return parser
 
@@ -66,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     try:
-        schema = parse_ddl(sql, schema_filter=args.schema)
+        schema = parse_ddl(sql, schema_filter=args.schema, dialect=args.dialect)
     except DdlParseError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
