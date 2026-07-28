@@ -23,3 +23,18 @@ feasibility discussion first, no code until the design was settled.
   rather than skipping the pipeline silently.
 - Verified: `node --check` passes, no imports. Runtime behaviour needs manual testing in Chrome
   (can't drive Tampermonkey from here).
+
+## 2026-07-28 — `feat/per-site-budgets-and-always-on-badge` (from `webpage-time-tracker`)
+
+v0.2 PR 1 of 2. Pooled budget → per-site limits.
+
+- State `wtt.state.v1` {day, seconds} → `wtt.state.v2` { days: { day: { site: seconds } } }, 14-day
+  rolling history, pruned on read (ISO keys sort as dates). No migration — v1 held only today.
+- `resync()` now merges per site, so two tabs on different tracked sites do not clobber each other.
+- Each rule carries `limitMinutes` (Shorts 15, Reels 15, X 30); `budgetMinutes` deleted. Escalation
+  ladder + snooze are per site.
+- Badge always visible on a tracked page, dimmed under 50%; dropped the `at: 0.5` LEVELS entry since
+  the badge no longer gates on a level.
+- Menu: per-site status + 7-day trend; reset/grant act on the active site only.
+- No specialist agents — session config disallows spawning them unprompted; declared, not skipped.
+- Verified: `node --check` passes. Runtime needs manual Chrome testing.

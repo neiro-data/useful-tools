@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Webpage Time Tracker
 // @namespace    https://github.com/neiro-data/useful-tools
-// @version      0.1.0
-// @description  Pools focused time across time-sink sites into one shared daily budget, then escalates nudges once you go over.
+// @version      0.2.0
+// @description  Tracks focused time per time-sink site against that site's own daily limit, then escalates nudges once you go over.
 // @author       neiro
 // @match        *://*/*
 // @run-at       document-start
@@ -19,8 +19,6 @@
   // CONFIG — the only part meant to be edited.
   // ---------------------------------------------------------------------------
   const CONFIG = {
-    // One budget shared by every rule below, not one budget per site.
-    budgetMinutes: 45,
     // The day rolls over at this local hour. 4am rather than midnight, so
     // "it resets in two minutes" isn't available at 23:58.
     dayStartHour: 4,
@@ -28,26 +26,43 @@
     idleSeconds: 60,
     // How long a dismissed overlay stays gone.
     snoozeMinutes: 5,
+    // Days of per-site history kept. Nothing enforces against it — it exists so
+    // "am I actually improving?" is answerable.
+    historyDays: 14,
     tickMs: 1000,
     saveEverySeconds: 5,
 
+    // Each rule carries its own daily limit — there is no pooled budget.
     // host is matched against location.hostname, path against location.pathname.
     // Omit path to track the whole site.
     rules: [
-      { name: 'YouTube Shorts', host: /(^|\.)youtube\.com$/, path: /^\/shorts(\/|$)/ },
-      { name: 'Instagram Reels', host: /(^|\.)instagram\.com$/, path: /^\/reels?(\/|$)/ },
-      { name: 'X', host: /(^|\.)(x|twitter)\.com$/ },
+      {
+        name: 'YouTube Shorts',
+        host: /(^|\.)youtube\.com$/,
+        path: /^\/shorts(\/|$)/,
+        limitMinutes: 15,
+      },
+      {
+        name: 'Instagram Reels',
+        host: /(^|\.)instagram\.com$/,
+        path: /^\/reels?(\/|$)/,
+        limitMinutes: 15,
+      },
+      { name: 'X', host: /(^|\.)(x|twitter)\.com$/, limitMinutes: 30 },
     ],
   };
 
-  // Escalation ladder, highest first — the first entry whose `at` the ratio
-  // has reached wins.
+  // Escalation ladder for a single site, highest first — the first entry whose
+  // `at` that site's ratio has reached wins. Below 1.0 there is no level: the
+  // badge alone carries the information, and it is always on.
   const LEVELS = [
     { at: 1.5, overlay: true, dismissDelaySeconds: 5, grayscale: true, pauseVideo: true },
     { at: 1.25, overlay: true, dismissDelaySeconds: 5 },
     { at: 1.0, overlay: true, dismissDelaySeconds: 0 },
-    { at: 0.5, badge: true },
   ];
+
+  // Ratio below which the badge is dimmed rather than fully opaque.
+  const DIM_BELOW = 0.5;
 
   // ---------------------------------------------------------------------------
   // Cheap early-out.
@@ -60,15 +75,17 @@
   // ---------------------------------------------------------------------------
   if (!CONFIG.rules.some((rule) => rule.host.test(location.hostname))) return;
 
-  const STORE_KEY = 'wtt.state.v1';
-  const budgetSeconds = () => Math.max(1, Math.round(CONFIG.budgetMinutes * 60));
+  const STORE_KEY = 'wtt.state.v2';
+  const budgetSeconds = (rule) => Math.max(1, Math.round(rule.limitMinutes * 60));
 
   // ---------------------------------------------------------------------------
   // State, shared across origins.
   //
-  // localStorage is per-origin and so structurally cannot hold a counter
-  // pooled across YouTube + Instagram + X. GM_setValue is stored by
-  // Tampermonkey itself and is visible from every matched origin.
+  // localStorage is per-origin and so structurally cannot hold counters visible
+  // from YouTube *and* Instagram *and* X. GM_setValue is stored by Tampermonkey
+  // itself and is visible from every matched origin.
+  //
+  // Shape: { days: { "2026-07-28": { "YouTube Shorts": 412.5, … }, … } }
   // ---------------------------------------------------------------------------
   function dayKey(now = Date.now()) {
     const d = new Date(now - CONFIG.dayStartHour * 3600e3);
@@ -77,7 +94,6 @@
   }
 
   function readState() {
-    const today = dayKey();
     let raw = null;
     try {
       raw = GM_getValue(STORE_KEY, null);
@@ -91,10 +107,21 @@
         raw = null;
       }
     }
-    if (!raw || raw.day !== today || typeof raw.seconds !== 'number') {
-      return { day: today, seconds: 0 };
+    if (!raw || typeof raw.days !== 'object' || raw.days === null) return { days: {} };
+
+    // Day keys are zero-padded ISO dates, so a lexicographic compare is a date
+    // compare, and pruning on read means no separate maintenance pass.
+    const cutoff = dayKey(Date.now() - CONFIG.historyDays * 86400e3);
+    const days = {};
+    for (const [day, sites] of Object.entries(raw.days)) {
+      if (day < cutoff || !sites || typeof sites !== 'object') continue;
+      const clean = {};
+      for (const [name, seconds] of Object.entries(sites)) {
+        if (typeof seconds === 'number' && isFinite(seconds) && seconds > 0) clean[name] = seconds;
+      }
+      days[day] = clean;
     }
-    return { day: today, seconds: raw.seconds };
+    return { days };
   }
 
   function writeState(next) {
@@ -109,7 +136,16 @@
   let unsaved = 0;
   let lastTick = Date.now();
   let lastActivity = Date.now();
-  let snoozeUntil = 0;
+  // Per site, so dismissing on X doesn't also silence Shorts.
+  let snoozeUntil = {};
+
+  function today() {
+    const key = dayKey();
+    if (!state.days[key]) state.days[key] = {};
+    return state.days[key];
+  }
+
+  const usedSeconds = (rule) => today()[rule.name] || 0;
 
   function flush() {
     if (unsaved > 0) {
@@ -118,16 +154,21 @@
     }
   }
 
-  // Another tab may have advanced the counter while this one was hidden.
+  // Another tab may have advanced a counter while this one was hidden. Merge
+  // per site rather than wholesale, so two tabs on *different* tracked sites
+  // don't clobber each other's progress.
   function resync() {
     flush();
     const stored = readState();
-    if (stored.day !== state.day) {
-      state = stored;
-      snoozeUntil = 0;
-      return;
+    const key = dayKey();
+    const mine = state.days[key] || {};
+    const theirs = stored.days[key] || {};
+    const merged = {};
+    for (const name of new Set([...Object.keys(mine), ...Object.keys(theirs)])) {
+      merged[name] = Math.max(mine[name] || 0, theirs[name] || 0);
     }
-    state = { day: stored.day, seconds: Math.max(stored.seconds, state.seconds) };
+    stored.days[key] = merged;
+    state = stored;
   }
 
   // ---------------------------------------------------------------------------
@@ -142,8 +183,8 @@
     return null;
   }
 
-  // Only the visible, focused tab counts — which also means two tracked tabs
-  // can never double-count the same second.
+  // Only the visible, focused tab counts — which also means two tabs on the
+  // same site can never double-count the same second.
   function isCounting() {
     if (document.visibilityState !== 'visible') return false;
     if (!document.hasFocus()) return false;
@@ -214,7 +255,9 @@
       padding: 7px 12px; border-radius: 999px;
       box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
       pointer-events: none; white-space: nowrap;
+      transition: opacity 200ms ease;
     }
+    .badge.dim { opacity: 0.4; }
     .badge.over { background: rgba(150, 30, 30, 0.92); }
     .overlay {
       position: fixed; inset: 0;
@@ -238,7 +281,7 @@
   let badgeEl = null;
   let overlayEl = null;
   let overlayButton = null;
-  let overlayLevelAt = null;
+  let overlayKey = null;
   let overlayShownAt = 0;
   let grayscaleEl = null;
 
@@ -263,15 +306,17 @@
     return `${m}:${String(s % 60).padStart(2, '0')}`;
   }
 
-  function showBadge(ratio) {
+  function showBadge(rule, ratio) {
     const root = ui();
     if (!badgeEl) {
       badgeEl = document.createElement('div');
       badgeEl.className = 'badge';
       root.appendChild(badgeEl);
     }
+    badgeEl.classList.toggle('dim', ratio < DIM_BELOW);
     badgeEl.classList.toggle('over', ratio >= 1);
-    badgeEl.textContent = `${formatClock(state.seconds)} / ${CONFIG.budgetMinutes}:00`;
+    badgeEl.textContent =
+      `${rule.name} · ${formatClock(usedSeconds(rule))} / ${rule.limitMinutes}:00`;
   }
 
   function hideBadge() {
@@ -281,18 +326,19 @@
     }
   }
 
-  function showOverlay(level) {
+  function showOverlay(rule, level) {
     const root = ui();
-    // Rebuild only when the level changes, so the dismiss countdown isn't
-    // reset every tick.
-    if (!overlayEl || overlayLevelAt !== level.at) {
+    // Rebuild only when the site or level changes, so the dismiss countdown
+    // isn't reset every tick.
+    const key = `${rule.name}@${level.at}`;
+    if (!overlayEl || overlayKey !== key) {
       hideOverlay();
-      overlayLevelAt = level.at;
+      overlayKey = key;
       overlayShownAt = Date.now();
       overlayEl = document.createElement('div');
       overlayEl.className = 'overlay';
       overlayEl.innerHTML = `
-        <h1>Over your daily budget</h1>
+        <h1>Over your daily limit</h1>
         <div class="clock"></div>
         <p></p>
         <button type="button"></button>
@@ -300,16 +346,17 @@
       root.appendChild(overlayEl);
       overlayButton = overlayEl.querySelector('button');
       overlayButton.addEventListener('click', () => {
-        snoozeUntil = Date.now() + CONFIG.snoozeMinutes * 60000;
+        snoozeUntil[rule.name] = Date.now() + CONFIG.snoozeMinutes * 60000;
         hideOverlay();
         render();
       });
     }
 
-    const over = state.seconds - budgetSeconds();
-    overlayEl.querySelector('.clock').textContent = formatClock(state.seconds);
+    const used = usedSeconds(rule);
+    const over = used - budgetSeconds(rule);
+    overlayEl.querySelector('.clock').textContent = formatClock(used);
     overlayEl.querySelector('p').textContent =
-      `Budget is ${CONFIG.budgetMinutes} min/day across all tracked sites. ` +
+      `${rule.name} is limited to ${rule.limitMinutes} min/day. ` +
       `You're ${formatClock(over)} over. Resets at ${CONFIG.dayStartHour}:00.`;
 
     const waited = (Date.now() - overlayShownAt) / 1000;
@@ -325,7 +372,7 @@
       overlayEl.remove();
       overlayEl = null;
       overlayButton = null;
-      overlayLevelAt = null;
+      overlayKey = null;
     }
   }
 
@@ -346,37 +393,28 @@
     }
   }
 
-  function currentLevel() {
-    const ratio = state.seconds / budgetSeconds();
-    return LEVELS.find((level) => ratio >= level.at) || null;
-  }
-
   function render() {
-    if (!activeRule()) {
+    const rule = activeRule();
+    if (!rule) {
       hideOverlay();
       hideBadge();
       setGrayscale(false);
       return;
     }
 
-    const level = currentLevel();
-    if (!level) {
-      hideOverlay();
-      hideBadge();
-      setGrayscale(false);
-      return;
-    }
+    const ratio = usedSeconds(rule) / budgetSeconds(rule);
+    const level = LEVELS.find((entry) => ratio >= entry.at) || null;
 
-    setGrayscale(Boolean(level.grayscale));
-    if (level.pauseVideo) pauseVideos();
+    setGrayscale(Boolean(level && level.grayscale));
+    if (level && level.pauseVideo) pauseVideos();
 
-    const overlayVisible = Boolean(level.overlay) && Date.now() >= snoozeUntil;
-    if (overlayVisible) {
+    const snoozed = Date.now() < (snoozeUntil[rule.name] || 0);
+    if (level && level.overlay && !snoozed) {
       hideBadge();
-      showOverlay(level);
+      showOverlay(rule, level);
     } else {
       hideOverlay();
-      showBadge(state.seconds / budgetSeconds());
+      showBadge(rule, ratio);
     }
   }
 
@@ -390,15 +428,17 @@
     const delta = Math.min(Math.max(now - lastTick, 0), CONFIG.tickMs * 2);
     lastTick = now;
 
-    if (state.day !== dayKey(now)) {
-      state = { day: dayKey(now), seconds: 0 };
-      snoozeUntil = 0;
+    const key = dayKey(now);
+    if (!state.days[key]) {
+      state.days[key] = {};
+      snoozeUntil = {};
       unsaved = 0;
       writeState(state);
     }
 
-    if (delta > 0 && isCounting()) {
-      state.seconds += delta / 1000;
+    const rule = delta > 0 && isCounting() ? activeRule() : null;
+    if (rule) {
+      state.days[key][rule.name] = (state.days[key][rule.name] || 0) + delta / 1000;
       unsaved += delta / 1000;
       if (unsaved >= CONFIG.saveEverySeconds) flush();
     }
@@ -415,25 +455,42 @@
   if (typeof GM_registerMenuCommand === 'function') {
     GM_registerMenuCommand('Time tracker: status', () => {
       resync();
-      const pct = Math.round((state.seconds / budgetSeconds()) * 100);
+      const lines = CONFIG.rules.map((rule) => {
+        const used = usedSeconds(rule);
+        const pct = Math.round((used / budgetSeconds(rule)) * 100);
+        return `  ${rule.name}: ${formatClock(used)} / ${rule.limitMinutes}:00 (${pct}%)`;
+      });
+
+      // Last 7 days across every site, oldest first — the trend the per-day
+      // history exists for.
+      const recent = Object.keys(state.days).sort().slice(-7);
+      const trend = recent.map((day) => {
+        const total = Object.values(state.days[day]).reduce((sum, s) => sum + s, 0);
+        return `  ${day}: ${formatClock(total)}`;
+      });
+
       alert(
-        `Used ${formatClock(state.seconds)} of ${CONFIG.budgetMinutes}:00 (${pct}%)\n` +
-        `Day: ${state.day} (resets at ${CONFIG.dayStartHour}:00)`
+        `Today (${dayKey()}, resets at ${CONFIG.dayStartHour}:00)\n${lines.join('\n')}\n\n` +
+        `Last 7 days, all sites\n${trend.join('\n')}`
       );
     });
 
-    GM_registerMenuCommand("Time tracker: reset today's counter", () => {
-      state = { day: dayKey(), seconds: 0 };
-      unsaved = 0;
-      snoozeUntil = 0;
+    GM_registerMenuCommand("Time tracker: reset this site's counter", () => {
+      const rule = activeRule();
+      if (!rule) return;
+      resync();
+      delete today()[rule.name];
+      delete snoozeUntil[rule.name];
       writeState(state);
       render();
     });
 
-    GM_registerMenuCommand('Time tracker: grant 10 more minutes', () => {
+    GM_registerMenuCommand('Time tracker: grant 10 more minutes here', () => {
+      const rule = activeRule();
+      if (!rule) return;
       resync();
-      state.seconds = Math.max(0, state.seconds - 600);
-      snoozeUntil = 0;
+      today()[rule.name] = Math.max(0, usedSeconds(rule) - 600);
+      delete snoozeUntil[rule.name];
       writeState(state);
       render();
     });
