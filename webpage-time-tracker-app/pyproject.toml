@@ -5,6 +5,7 @@ description = "Tkinter settings app for the Webpage Time Tracker userscript"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "anthropic>=0.120.2",
     "pillow>=10.0",
 ]
 
