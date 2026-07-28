@@ -12,7 +12,14 @@ import re
 from xml.dom import minidom
 from xml.etree.ElementTree import Element, SubElement, tostring
 
-from ddl_to_drawio.layout import HEADER_HEIGHT, ROW_HEIGHT, BoxPosition, compute_layout
+from ddl_to_drawio.layout import (
+    FK_PREFIX,
+    HEADER_HEIGHT,
+    PK_PREFIX,
+    ROW_HEIGHT,
+    BoxPosition,
+    compute_layout,
+)
 from ddl_to_drawio.model import Schema, TableId
 
 _SLUG_RE = re.compile(r"[^a-zA-Z0-9_]+")
@@ -52,9 +59,9 @@ def _foreign_key_cell_id(
 def _column_label(name: str, type_text: str, *, is_pk: bool, is_fk: bool) -> str:
     prefix = ""
     if is_pk:
-        prefix += "PK "
+        prefix += PK_PREFIX
     if is_fk:
-        prefix += "FK "
+        prefix += FK_PREFIX
     label = f"{prefix}{name}"
     if type_text:
         label = f"{label}: {type_text}"
@@ -111,7 +118,8 @@ def build_mxgraph_xml(schema: Schema) -> str:
                 "value": str(table_id),
                 "style": (
                     "shape=table;startSize=30;container=1;collapsible=0;"
-                    "childLayout=tableLayout;fillColor=none;"
+                    "childLayout=tableLayout;fixedRows=1;rowLines=0;fontStyle=1;"
+                    "align=center;resizeLast=1;html=1;fillColor=none;"
                 ),
                 "vertex": "1",
                 "parent": "1",
@@ -140,12 +148,12 @@ def build_mxgraph_xml(schema: Schema) -> str:
                 "mxCell",
                 {
                     "id": column_cell_id,
-                    "value": label,
+                    "value": "",
                     "style": (
                         "shape=tableRow;horizontal=0;startSize=0;swimlaneHead=0;"
                         "swimlaneBody=0;fillColor=none;collapsible=0;dropTarget=0;"
                         "points=[[0,0.5],[1,0.5]];portConstraint=eastwest;"
-                        "top=0;left=0;right=0;bottom=1;"
+                        "top=0;left=0;right=0;bottom=1;html=1;"
                     ),
                     "vertex": "1",
                     "parent": table_cell_id,
@@ -159,6 +167,40 @@ def build_mxgraph_xml(schema: Schema) -> str:
                     "width": str(position.width),
                     "height": str(ROW_HEIGHT),
                     "as": "geometry",
+                },
+            )
+
+            label_cell = SubElement(
+                root,
+                "mxCell",
+                {
+                    "id": f"{column_cell_id}-label",
+                    "value": label,
+                    "style": (
+                        "shape=partialRectangle;connectable=0;fillColor=none;"
+                        "top=0;left=0;bottom=0;right=0;align=left;verticalAlign=middle;"
+                        "spacingLeft=6;spacingRight=6;overflow=hidden;whiteSpace=wrap;html=1;"
+                    ),
+                    "vertex": "1",
+                    "parent": column_cell_id,
+                },
+            )
+            label_geometry = SubElement(
+                label_cell,
+                "mxGeometry",
+                {
+                    "width": str(position.width),
+                    "height": str(ROW_HEIGHT),
+                    "as": "geometry",
+                },
+            )
+            SubElement(
+                label_geometry,
+                "mxRectangle",
+                {
+                    "width": str(position.width),
+                    "height": str(ROW_HEIGHT),
+                    "as": "alternateBounds",
                 },
             )
 
