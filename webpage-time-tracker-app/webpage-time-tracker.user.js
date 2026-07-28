@@ -56,7 +56,7 @@
   const CONFIG_FETCHED_KEY = 'wtt.config.fetchedAt';
   const CONFIG_URL = 'http://127.0.0.1:8787/config.json';
   // The refresh runs on every page, so it is rate-limited across all tabs.
-  const CONFIG_REFRESH_MS = 60000;
+  const CONFIG_REFRESH_MS = 30000;
 
   function gmGet(key, fallback) {
     try {
