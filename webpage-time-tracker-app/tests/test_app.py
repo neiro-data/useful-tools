@@ -3,11 +3,14 @@ from __future__ import annotations
 import inspect
 import tkinter as tk
 from collections.abc import Iterator
+from tkinter import messagebox
 
 import pytest
 
 from config_gui import app as app_module
+from config_gui import regex_suggest
 from config_gui.models import Site
+from config_gui.regex_suggest import Suggestion, SuggestUnavailable
 
 
 def _tk_root() -> tk.Tk | None:
@@ -88,4 +91,64 @@ def test_site_dialog_edit_prefills_from_existing_site(root: tk.Tk) -> None:
 
     assert dialog.result is not None
     assert dialog.result.limit_minutes == 45
+    dialog.destroy()
+
+
+# -- Suggest flow --------------------------------------------------------------
+
+
+def test_suggest_worker_failure_marshals_suggest_failed(
+    root: tk.Tk, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dialog = app_module.SiteDialog(root)
+    monkeypatch.setattr(regex_suggest, "suggest_local", lambda _domain: None)
+
+    def _raise(*_args: object, **_kwargs: object) -> Suggestion:
+        raise SuggestUnavailable("no CLI, no key")
+
+    monkeypatch.setattr(regex_suggest, "suggest_via_claude", _raise)
+
+    calls: list[str] = []
+    monkeypatch.setattr(dialog, "_suggest_failed", lambda message: calls.append(message))
+
+    dialog._suggest_worker("example.com", None, False)
+    root.update()
+
+    assert calls == ["no CLI, no key"]
+    dialog.destroy()
+
+
+def test_suggest_worker_success_marshals_suggest_done(
+    root: tk.Tk, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dialog = app_module.SiteDialog(root)
+    suggestion = Suggestion(host=None, path="^/watch(/|$)", note="videos")
+    monkeypatch.setattr(regex_suggest, "suggest_local", lambda _domain: suggestion)
+
+    seen: list[tuple[Suggestion, str]] = []
+    monkeypatch.setattr(
+        dialog, "_suggest_done", lambda suggestion, domain: seen.append((suggestion, domain))
+    )
+
+    dialog._suggest_worker("youtube.com", None, False)
+    root.update()
+
+    assert seen == [(suggestion, "youtube.com")]
+    dialog.destroy()
+
+
+def test_suggest_failed_reenables_button_and_shows_message(
+    root: tk.Tk, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dialog = app_module.SiteDialog(root)
+    dialog._btn_suggest.configure(state="disabled", text="Suggesting…")
+    shown: list[str] = []
+    monkeypatch.setattr(
+        messagebox, "showinfo", lambda _title, message, **_kwargs: shown.append(message)
+    )
+
+    dialog._suggest_failed("boom")
+
+    assert str(dialog._btn_suggest["state"]) == "normal"
+    assert shown == ["boom"]
     dialog.destroy()

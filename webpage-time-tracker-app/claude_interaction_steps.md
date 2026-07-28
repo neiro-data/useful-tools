@@ -77,3 +77,24 @@ Bug: per-site limits never updated. Two symptoms, one root cause + one gap.
   failing against pre-fix code via stash) → code-reviewer (no material defects).
 - Verified: ruff format/check, mypy strict, 40 pytest tests, `node --check`. GUI + Chrome behaviour
   still needs manual confirmation.
+
+## feat/suggest-cli-auth — Suggest without an API key + dialog UX
+
+- Suggest was unusable: `suggest_via_claude` demanded `ANTHROPIC_API_KEY`, which the user doesn't have
+  and doesn't want to create. Now it shells out to the already-authenticated Claude Code CLI
+  (`claude -p … --output-format json --model claude-haiku-4-5 --allowed-tools ""`, fixed argv, no
+  shell). SDK path kept as fallback only when the CLI is unavailable *and* the key is set; `anthropic`
+  moved to a `[project.optional-dependencies] api` extra.
+- `_extract_json` added because the CLI wraps its answer in a ```json fence — confirmed against the
+  real binary, the bare `json.loads` would have failed on every call.
+- No second Suggest button: one call already returns both host and path, so the single button moved to
+  the Domain row with an `(i)` hover tooltip naming the CLI requirement. Hint row relabelled
+  "Suggest hint (optional)" + inline example; dead `_suggest_pending` removed.
+- Agent: python-pro. Verified: ruff, mypy strict, 130 pytest tests, and a live `_claude_cli_text` call.
+  Tk dialog layout still needs a manual look.
+- Follow-up stages: test-automator (17 more tests — `_extract_json` cases, CLI envelope edges, cache-hit
+  skips subprocess, CLI-wins-over-SDK precedence, plus first `_suggest_worker` coverage in test_app.py)
+  → code-reviewer, which found one real defect: `subprocess.run` can raise OSError/PermissionError past
+  the `SuggestUnavailable` contract, killing the worker thread with the button stuck on "Suggesting…".
+  Fixed with an `except OSError` arm + regression test; also noted in-code that `--allowed-tools ""` is
+  defense-in-depth, not a sandbox. 147 tests green.

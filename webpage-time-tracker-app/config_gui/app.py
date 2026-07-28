@@ -21,6 +21,39 @@ from config_gui.regex_suggest import Suggestion
 _PAD = 10
 
 
+class Tooltip:
+    """A small delay-free popup shown on hover, bound to one or more widgets."""
+
+    def __init__(self, widget: tk.Widget, text: str) -> None:
+        self._text = text
+        self._tip: tk.Toplevel | None = None
+        widget.bind("<Enter>", self._show, add="+")
+        widget.bind("<Leave>", self._hide, add="+")
+
+    def _show(self, event: tk.Event) -> None:
+        if self._tip is not None:
+            return
+        self._tip = tk.Toplevel(event.widget)
+        self._tip.wm_overrideredirect(True)
+        x = event.widget.winfo_rootx()
+        y = event.widget.winfo_rooty() + event.widget.winfo_height() + 4
+        self._tip.wm_geometry(f"+{x}+{y}")
+        ttk.Label(
+            self._tip,
+            text=self._text,
+            background="#ffffe0",
+            relief="solid",
+            borderwidth=1,
+            padding=4,
+            wraplength=280,
+        ).pack()
+
+    def _hide(self, _event: tk.Event) -> None:
+        if self._tip is not None:
+            self._tip.destroy()
+            self._tip = None
+
+
 class SuggestPreviewDialog(tk.Toplevel):
     """Shows a proposed host/path with a match-samples table; `result` is Apply's Suggestion."""
 
@@ -88,7 +121,6 @@ class SiteDialog(tk.Toplevel):
         self._var_hint = tk.StringVar(value="")
         self._var_limit = tk.StringVar(value=str(site.limit_minutes if site else 15))
         self._var_advanced = tk.BooleanVar(value=advanced)
-        self._suggest_pending = False
 
         body = ttk.Frame(self, padding=_PAD)
         body.grid(sticky="nsew")
@@ -99,19 +131,30 @@ class SiteDialog(tk.Toplevel):
             ("Host regex", ttk.Entry(body, textvariable=self._var_host, width=34)),
             ("Path regex (optional)", ttk.Entry(body, textvariable=self._var_path, width=34)),
             (
-                "Only this section (optional hint)",
+                "Suggest hint (optional)",
                 ttk.Entry(body, textvariable=self._var_hint, width=34),
             ),
             ("Limit (minutes)", ttk.Spinbox(body, from_=1, to=1440, textvariable=self._var_limit)),
         ]
+        _tooltip_text = (
+            "Needs the Claude Code CLI (`claude`) installed and logged in. "
+            "Falls back to ANTHROPIC_API_KEY if set."
+        )
         self._widgets: dict[str, ttk.Entry] = {}
         for row, (label, widget) in enumerate(rows):
             ttk.Label(body, text=label).grid(row=row, column=0, sticky="w", pady=3, padx=(0, 8))
             widget.grid(row=row, column=1, sticky="ew", pady=3)
             self._widgets[label] = widget
-            if label == "Path regex (optional)":
+            if label == "Domain":
                 self._btn_suggest = ttk.Button(body, text="Suggest…", command=self._suggest)
                 self._btn_suggest.grid(row=row, column=2, sticky="w", padx=(6, 0))
+                Tooltip(self._btn_suggest, _tooltip_text)
+            if label == "Suggest hint (optional)":
+                ttk.Label(
+                    body,
+                    text='e.g. "only Shorts" — used by Suggest, not saved',
+                    foreground="#888",
+                ).grid(row=row, column=2, sticky="w", padx=(6, 0))
 
         ttk.Checkbutton(
             body,
@@ -145,7 +188,6 @@ class SiteDialog(tk.Toplevel):
             return
         hint = self._var_hint.get().strip() or None
         advanced = self._var_advanced.get()
-        self._suggest_pending = True
         self._btn_suggest.configure(state="disabled", text="Suggesting…")
         threading.Thread(
             target=self._suggest_worker, args=(domain, hint, advanced), daemon=True
@@ -172,14 +214,12 @@ class SiteDialog(tk.Toplevel):
     def _suggest_failed(self, message: str) -> None:
         if not self.winfo_exists():
             return
-        self._suggest_pending = False
         self._btn_suggest.configure(state="normal", text="Suggest…")
         messagebox.showinfo("Suggest", message, parent=self)
 
     def _suggest_done(self, suggestion: Suggestion, domain: str) -> None:
         if not self.winfo_exists():
             return
-        self._suggest_pending = False
         self._btn_suggest.configure(state="normal", text="Suggest…")
         dialog = SuggestPreviewDialog(self, suggestion, domain)
         self.wait_window(dialog)

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+import subprocess
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -204,16 +206,18 @@ def test_corrupt_cache_is_tolerated() -> None:
     assert regex_suggest._read_cache() == {}
 
 
-# -- Claude fallback -------------------------------------------------------------
+# -- Claude fallback (anthropic SDK, used only when the CLI is unavailable) --------
 
 
 def test_suggest_via_claude_missing_key_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(shutil, "which", lambda _cmd: None)
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     with pytest.raises(SuggestUnavailable):
         regex_suggest.suggest_via_claude("example.com", None, advanced=False)
 
 
 def test_suggest_via_claude_missing_package_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(shutil, "which", lambda _cmd: None)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
     with patch.dict("sys.modules", {"anthropic": None}):
         with pytest.raises(SuggestUnavailable):
@@ -232,6 +236,7 @@ def _mock_client(response_text: str) -> MagicMock:
 
 
 def test_suggest_via_claude_malformed_json_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(shutil, "which", lambda _cmd: None)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
     fake_module = MagicMock()
     fake_module.Anthropic.return_value = _mock_client("not json")
@@ -244,6 +249,7 @@ def test_suggest_via_claude_rejects_unvalidated_response_and_does_not_cache(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A well-typed but semantically bad response (e.g. an unanchored host) must not persist."""
+    monkeypatch.setattr(shutil, "which", lambda _cmd: None)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
     payload: dict[str, Any] = {"host": "example.com", "path": None, "note": "bad"}
     fake_module = MagicMock()
@@ -256,9 +262,10 @@ def test_suggest_via_claude_rejects_unvalidated_response_and_does_not_cache(
     assert key not in regex_suggest._read_cache()
 
 
-def test_suggest_via_claude_valid_response_parsed_and_cached(
+def test_suggest_via_claude_sdk_fallback_valid_response_parsed_and_cached(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(shutil, "which", lambda _cmd: None)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
     payload: dict[str, Any] = {"host": None, "path": "^/x(/|$)", "note": "test section"}
     fake_module = MagicMock()
@@ -273,14 +280,223 @@ def test_suggest_via_claude_valid_response_parsed_and_cached(
     assert key in cached
 
 
-def test_suggest_via_claude_cached_hit_skips_client(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_suggest_via_claude_cached_hit_skips_cli_and_sdk(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
     key = regex_suggest._cache_key("example.com", None, advanced=False)
     regex_suggest._write_cache({key: {"host": None, "path": "^/cached", "note": "cached"}})
 
+    which = MagicMock()
+    monkeypatch.setattr(shutil, "which", which)
+    suggestion = regex_suggest.suggest_via_claude("example.com", None, advanced=False)
+
+    assert suggestion.path == "^/cached"
+    which.assert_not_called()
+
+
+# -- Claude Code CLI (primary transport) --------------------------------------
+
+
+def _mock_cli_run(stdout: str, *, returncode: int = 0) -> MagicMock:
+    result = MagicMock()
+    result.returncode = returncode
+    result.stdout = stdout
+    result.stderr = "" if returncode == 0 else "not logged in"
+    return result
+
+
+def test_suggest_via_claude_cli_happy_path_parses_and_caches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = {"host": None, "path": "^/x(/|$)", "note": "cli section"}
+    envelope = json.dumps({"result": json.dumps(payload)})
+    monkeypatch.setattr(shutil, "which", lambda _cmd: "/usr/local/bin/claude")
+    mock_run = MagicMock(return_value=_mock_cli_run(envelope))
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    suggestion = regex_suggest.suggest_via_claude("example.com", "x section", advanced=False)
+
+    assert suggestion.path == "^/x(/|$)"
+    assert suggestion.note == "cli section"
+    key = regex_suggest._cache_key("example.com", "x section", advanced=False)
+    assert key in regex_suggest._read_cache()
+
+    args, kwargs = mock_run.call_args
+    assert "--allowed-tools" in args[0]
+    assert kwargs.get("shell", False) is False
+
+
+def test_suggest_via_claude_cli_result_wrapped_in_json_fence_still_parses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = {"host": None, "path": "^/y(/|$)", "note": "fenced"}
+    fenced_result = f"```json\n{json.dumps(payload)}\n```"
+    envelope = json.dumps({"result": fenced_result})
+    monkeypatch.setattr(shutil, "which", lambda _cmd: "/usr/local/bin/claude")
+    monkeypatch.setattr(subprocess, "run", MagicMock(return_value=_mock_cli_run(envelope)))
+
+    suggestion = regex_suggest.suggest_via_claude("example.com", None, advanced=False)
+
+    assert suggestion.path == "^/y(/|$)"
+
+
+def test_suggest_via_claude_cli_missing_binary_raises_without_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(shutil, "which", lambda _cmd: None)
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    with pytest.raises(SuggestUnavailable):
+        regex_suggest.suggest_via_claude("example.com", None, advanced=False)
+
+
+def test_suggest_via_claude_cli_missing_binary_falls_back_to_sdk_when_key_set(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(shutil, "which", lambda _cmd: None)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    payload: dict[str, Any] = {"host": None, "path": "^/z(/|$)", "note": "sdk fallback"}
+    fake_module = MagicMock()
+    fake_module.Anthropic.return_value = _mock_client(json.dumps(payload))
+    with patch.dict("sys.modules", {"anthropic": fake_module}):
+        suggestion = regex_suggest.suggest_via_claude("example.com", None, advanced=False)
+
+    assert suggestion.path == "^/z(/|$)"
+    fake_module.Anthropic.assert_called_once()
+
+
+def test_suggest_via_claude_cli_nonzero_exit_raises_and_does_not_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(shutil, "which", lambda _cmd: "/usr/local/bin/claude")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr(subprocess, "run", MagicMock(return_value=_mock_cli_run("", returncode=1)))
+
+    with pytest.raises(SuggestUnavailable):
+        regex_suggest.suggest_via_claude("example.com", None, advanced=False)
+
+    key = regex_suggest._cache_key("example.com", None, advanced=False)
+    assert key not in regex_suggest._read_cache()
+
+
+def test_suggest_via_claude_cli_present_and_key_set_prefers_cli_over_sdk(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CLI wins even when a key is set — the SDK must never be touched."""
+    payload = {"host": None, "path": "^/w(/|$)", "note": "cli wins"}
+    envelope = json.dumps({"result": json.dumps(payload)})
+    monkeypatch.setattr(shutil, "which", lambda _cmd: "/usr/local/bin/claude")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test")
+    monkeypatch.setattr(subprocess, "run", MagicMock(return_value=_mock_cli_run(envelope)))
     fake_module = MagicMock()
     with patch.dict("sys.modules", {"anthropic": fake_module}):
         suggestion = regex_suggest.suggest_via_claude("example.com", None, advanced=False)
 
-    assert suggestion.path == "^/cached"
+    assert suggestion.path == "^/w(/|$)"
     fake_module.Anthropic.assert_not_called()
+
+
+def test_suggest_via_claude_cli_timeout_raises_and_does_not_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import subprocess as subprocess_module
+
+    monkeypatch.setattr(shutil, "which", lambda _cmd: "/usr/local/bin/claude")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    def _raise_timeout(*_args: object, **_kwargs: object) -> MagicMock:
+        raise subprocess_module.TimeoutExpired(cmd="claude", timeout=45.0)
+
+    monkeypatch.setattr(subprocess, "run", _raise_timeout)
+
+    with pytest.raises(SuggestUnavailable):
+        regex_suggest.suggest_via_claude("example.com", None, advanced=False)
+
+    key = regex_suggest._cache_key("example.com", None, advanced=False)
+    assert key not in regex_suggest._read_cache()
+
+
+def test_suggest_via_claude_cli_oserror_raises_suggest_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A binary that `which` found but that can't be executed must not escape as an OSError."""
+    monkeypatch.setattr(shutil, "which", lambda _cmd: "/usr/local/bin/claude")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    def _raise_oserror(*_args: object, **_kwargs: object) -> MagicMock:
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(subprocess, "run", _raise_oserror)
+
+    with pytest.raises(SuggestUnavailable):
+        regex_suggest.suggest_via_claude("example.com", None, advanced=False)
+
+    key = regex_suggest._cache_key("example.com", None, advanced=False)
+    assert key not in regex_suggest._read_cache()
+
+
+def test_suggest_via_claude_cache_hit_never_calls_subprocess(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    key = regex_suggest._cache_key("example.com", None, advanced=False)
+    regex_suggest._write_cache({key: {"host": None, "path": "^/cached", "note": "cached"}})
+
+    monkeypatch.setattr(shutil, "which", lambda _cmd: "/usr/local/bin/claude")
+    run = MagicMock()
+    monkeypatch.setattr(subprocess, "run", run)
+
+    suggestion = regex_suggest.suggest_via_claude("example.com", None, advanced=False)
+
+    assert suggestion.path == "^/cached"
+    run.assert_not_called()
+
+
+def test_suggest_via_claude_cli_invalid_envelope_writes_nothing_to_cache(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(shutil, "which", lambda _cmd: "/usr/local/bin/claude")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr(subprocess, "run", MagicMock(return_value=_mock_cli_run("not json")))
+
+    with pytest.raises(SuggestUnavailable):
+        regex_suggest.suggest_via_claude("example.com", None, advanced=False)
+
+    assert regex_suggest._read_cache() == {}
+
+
+# -- _extract_json --------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ('{"a": 1}', '{"a": 1}'),
+        ('```json\n{"a": 1}\n```', '{"a": 1}'),
+        ('```\n{"a": 1}\n```', '{"a": 1}'),
+        ('Sure, here it is:\n```json\n{"a": 1}\n```\nHope that helps!', '{"a": 1}'),
+        ("just some prose, no JSON here", "just some prose, no JSON here"),
+    ],
+)
+def test_extract_json(text: str, expected: str) -> None:
+    assert regex_suggest._extract_json(text) == expected
+
+
+# -- _claude_cli_text envelope edge cases ---------------------------------------
+
+
+@pytest.mark.parametrize(
+    "stdout",
+    [
+        "not json at all",
+        "[1, 2, 3]",
+        json.dumps({"other_key": "value"}),
+        json.dumps({"result": None}),
+        json.dumps({"result": {"nested": True}}),
+    ],
+)
+def test_claude_cli_text_rejects_bad_envelopes(
+    monkeypatch: pytest.MonkeyPatch, stdout: str
+) -> None:
+    monkeypatch.setattr(shutil, "which", lambda _cmd: "/usr/local/bin/claude")
+    monkeypatch.setattr(subprocess, "run", MagicMock(return_value=_mock_cli_run(stdout)))
+
+    with pytest.raises(SuggestUnavailable):
+        regex_suggest._claude_cli_text("prompt")

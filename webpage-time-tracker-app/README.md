@@ -48,6 +48,13 @@ Icons come from each site's own `/favicon.ico`, fetched once and cached as PNG u
 icon service is involved. Icons are GUI-only — the in-page badge stays text, so the host page's CSP
 never enters into it.
 
+The Add/Edit dialog's **Suggest** button proposes a host/path regex for a domain (an optional hint
+narrows it, e.g. "only Shorts"). It checks a small built-in table first, then asks Claude on a miss,
+using the Claude Code CLI (`claude`) — it must be installed and logged in. If the CLI isn't on `PATH`
+and `ANTHROPIC_API_KEY` is set, it falls back to the `anthropic` SDK (install the `api` extra:
+`uv sync --extra api`). Suggestions are validated and cached at
+`~/.webpage-time-tracker/suggest-cache.json`.
+
 #### Development
 
 ```sh
