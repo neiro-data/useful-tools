@@ -59,3 +59,21 @@ v0.2 PR 2 of 2. Site list moves out of the `.user.js` into a Tkinter app.
 - No specialist agents — session config disallows spawning them unprompted; declared, not skipped.
 - Verified: `node --check`, ruff, mypy, 36 pytest tests. GUI window + Tampermonkey behaviour need
   manual testing.
+
+## 2026-07-28 — `fix/site-dialog-name-shadow-and-config-refresh` (from `webpage-time-tracker`)
+
+Bug: per-site limits never updated. Two symptoms, one root cause + one gap.
+
+- `SiteDialog` set `self._name = tk.StringVar(...)`, shadowing `tkinter.Misc._name`. `destroy()` then
+  raised `TypeError: unhashable type: 'StringVar'`, so `_save()` blew up mid-callback: the dialog never
+  closed, `wait_window` never returned a result, the edit was silently dropped, and closing the main
+  window crashed on the stale child. Renamed all six Tk vars to `_var_*`; audited `App`/`SiteDialog`
+  for other tkinter-internal collisions (none).
+- `refreshConfig()` ran only once at startup, so an already-open tab never saw a changed limit. Added
+  `setInterval(refreshConfig, CONFIG_REFRESH_MS)` after the host early-out; the cross-tab 60s rate
+  limit is untouched. A newly added *host* still needs a reload (early-out already ran).
+- `server.py` verified: `do_GET` re-reads via `store.load()` per request, no snapshot. No change.
+- Agents: python-pro (fix) → test-automator (4 new regression tests in `tests/test_app.py`, verified
+  failing against pre-fix code via stash) → code-reviewer (no material defects).
+- Verified: ruff format/check, mypy strict, 40 pytest tests, `node --check`. GUI + Chrome behaviour
+  still needs manual confirmation.

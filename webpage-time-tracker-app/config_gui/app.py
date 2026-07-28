@@ -30,22 +30,22 @@ class SiteDialog(tk.Toplevel):
         self.transient(parent)
 
         advanced = bool(site and not site.domain)
-        self._name = tk.StringVar(value=site.name if site else "")
-        self._domain = tk.StringVar(value=(site.domain if site else ""))
-        self._host = tk.StringVar(value=(site.host if site else ""))
-        self._path = tk.StringVar(value=(site.path or "" if site else ""))
-        self._limit = tk.StringVar(value=str(site.limit_minutes if site else 15))
-        self._advanced = tk.BooleanVar(value=advanced)
+        self._var_name = tk.StringVar(value=site.name if site else "")
+        self._var_domain = tk.StringVar(value=(site.domain if site else ""))
+        self._var_host = tk.StringVar(value=(site.host if site else ""))
+        self._var_path = tk.StringVar(value=(site.path or "" if site else ""))
+        self._var_limit = tk.StringVar(value=str(site.limit_minutes if site else 15))
+        self._var_advanced = tk.BooleanVar(value=advanced)
 
         body = ttk.Frame(self, padding=_PAD)
         body.grid(sticky="nsew")
         # ttk.Spinbox subclasses ttk.Entry, so one type covers every row.
         rows: list[tuple[str, ttk.Entry]] = [
-            ("Name", ttk.Entry(body, textvariable=self._name, width=34)),
-            ("Domain", ttk.Entry(body, textvariable=self._domain, width=34)),
-            ("Host regex", ttk.Entry(body, textvariable=self._host, width=34)),
-            ("Path regex (optional)", ttk.Entry(body, textvariable=self._path, width=34)),
-            ("Limit (minutes)", ttk.Spinbox(body, from_=1, to=1440, textvariable=self._limit)),
+            ("Name", ttk.Entry(body, textvariable=self._var_name, width=34)),
+            ("Domain", ttk.Entry(body, textvariable=self._var_domain, width=34)),
+            ("Host regex", ttk.Entry(body, textvariable=self._var_host, width=34)),
+            ("Path regex (optional)", ttk.Entry(body, textvariable=self._var_path, width=34)),
+            ("Limit (minutes)", ttk.Spinbox(body, from_=1, to=1440, textvariable=self._var_limit)),
         ]
         self._widgets: dict[str, ttk.Entry] = {}
         for row, (label, widget) in enumerate(rows):
@@ -56,7 +56,7 @@ class SiteDialog(tk.Toplevel):
         ttk.Checkbutton(
             body,
             text="Advanced: write the host regex myself",
-            variable=self._advanced,
+            variable=self._var_advanced,
             command=self._sync_advanced,
         ).grid(row=len(rows), column=0, columnspan=2, sticky="w", pady=(6, 0))
 
@@ -72,27 +72,29 @@ class SiteDialog(tk.Toplevel):
         self._widgets["Name"].focus_set()
 
     def _sync_advanced(self) -> None:
-        advanced = self._advanced.get()
+        advanced = self._var_advanced.get()
         self._widgets["Domain"].configure(state="disabled" if advanced else "normal")
         self._widgets["Host regex"].configure(state="normal" if advanced else "disabled")
-        if not advanced and self._domain.get():
-            self._host.set("")
+        if not advanced and self._var_domain.get():
+            self._var_host.set("")
 
     def _save(self) -> None:
         try:
-            limit = int(self._limit.get())
+            limit = int(self._var_limit.get())
         except ValueError:
             messagebox.showerror("Invalid limit", "Limit must be a whole number.", parent=self)
             return
         try:
             host = (
-                self._host.get().strip() if self._advanced.get() else host_regex(self._domain.get())
+                self._var_host.get().strip()
+                if self._var_advanced.get()
+                else host_regex(self._var_domain.get())
             )
             self.result = Site(
-                name=self._name.get().strip(),
+                name=self._var_name.get().strip(),
                 host=host,
                 limit_minutes=limit,
-                path=self._path.get().strip() or None,
+                path=self._var_path.get().strip() or None,
             ).validated()
         except ConfigError as err:
             messagebox.showerror("Invalid site", str(err), parent=self)
