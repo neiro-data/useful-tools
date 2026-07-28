@@ -5,4 +5,3 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 *.drawio
-!tests/fixtures/*.drawio
