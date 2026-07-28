@@ -10,13 +10,64 @@ from __future__ import annotations
 
 import threading
 import tkinter as tk
+from collections.abc import Callable
 from http.server import ThreadingHTTPServer
 from tkinter import messagebox, ttk
 
-from config_gui import icons, server, store
+from config_gui import icons, regex_suggest, server, store
 from config_gui.models import Config, ConfigError, Site, host_regex
+from config_gui.regex_suggest import Suggestion
 
 _PAD = 10
+
+
+class SuggestPreviewDialog(tk.Toplevel):
+    """Shows a proposed host/path with a match-samples table; `result` is Apply's Suggestion."""
+
+    def __init__(self, parent: tk.Toplevel, suggestion: Suggestion, domain: str) -> None:
+        super().__init__(parent)
+        self.result: Suggestion | None = None
+        self.title("Suggested regex")
+        self.resizable(False, False)
+        self.transient(parent)
+        self._suggestion = suggestion
+
+        body = ttk.Frame(self, padding=_PAD)
+        body.grid(sticky="nsew")
+
+        row = 0
+        if suggestion.host:
+            ttk.Label(body, text=f"Host: {suggestion.host}").grid(
+                row=row, column=0, columnspan=3, sticky="w", pady=2
+            )
+            row += 1
+        if suggestion.path:
+            ttk.Label(body, text=f"Path: {suggestion.path}").grid(
+                row=row, column=0, columnspan=3, sticky="w", pady=2
+            )
+            row += 1
+        ttk.Label(body, text=suggestion.note, foreground="#666", wraplength=340).grid(
+            row=row, column=0, columnspan=3, sticky="w", pady=(0, 8)
+        )
+        row += 1
+
+        for sample_url, matched, expected in regex_suggest.match_samples(suggestion, domain):
+            ok = matched == expected
+            mark = "✓" if ok else "✗"
+            color = "#2a7" if ok else "#c33"
+            ttk.Label(body, text=mark, foreground=color).grid(row=row, column=0, sticky="w")
+            ttk.Label(body, text=sample_url).grid(row=row, column=1, sticky="w", padx=(4, 0))
+            row += 1
+
+        buttons = ttk.Frame(body)
+        buttons.grid(row=row, column=0, columnspan=3, sticky="e", pady=(_PAD, 0))
+        ttk.Button(buttons, text="Cancel", command=self.destroy).pack(side="right", padx=(6, 0))
+        ttk.Button(buttons, text="Apply", command=self._apply).pack(side="right")
+        self.grab_set()
+
+    def _apply(self) -> None:
+        self.result = self._suggestion
+        self.destroy()
 
 
 class SiteDialog(tk.Toplevel):
@@ -34,8 +85,10 @@ class SiteDialog(tk.Toplevel):
         self._var_domain = tk.StringVar(value=(site.domain if site else ""))
         self._var_host = tk.StringVar(value=(site.host if site else ""))
         self._var_path = tk.StringVar(value=(site.path or "" if site else ""))
+        self._var_hint = tk.StringVar(value="")
         self._var_limit = tk.StringVar(value=str(site.limit_minutes if site else 15))
         self._var_advanced = tk.BooleanVar(value=advanced)
+        self._suggest_pending = False
 
         body = ttk.Frame(self, padding=_PAD)
         body.grid(sticky="nsew")
@@ -45,6 +98,10 @@ class SiteDialog(tk.Toplevel):
             ("Domain", ttk.Entry(body, textvariable=self._var_domain, width=34)),
             ("Host regex", ttk.Entry(body, textvariable=self._var_host, width=34)),
             ("Path regex (optional)", ttk.Entry(body, textvariable=self._var_path, width=34)),
+            (
+                "Only this section (optional hint)",
+                ttk.Entry(body, textvariable=self._var_hint, width=34),
+            ),
             ("Limit (minutes)", ttk.Spinbox(body, from_=1, to=1440, textvariable=self._var_limit)),
         ]
         self._widgets: dict[str, ttk.Entry] = {}
@@ -52,6 +109,9 @@ class SiteDialog(tk.Toplevel):
             ttk.Label(body, text=label).grid(row=row, column=0, sticky="w", pady=3, padx=(0, 8))
             widget.grid(row=row, column=1, sticky="ew", pady=3)
             self._widgets[label] = widget
+            if label == "Path regex (optional)":
+                self._btn_suggest = ttk.Button(body, text="Suggest…", command=self._suggest)
+                self._btn_suggest.grid(row=row, column=2, sticky="w", padx=(6, 0))
 
         ttk.Checkbutton(
             body,
@@ -77,6 +137,58 @@ class SiteDialog(tk.Toplevel):
         self._widgets["Host regex"].configure(state="normal" if advanced else "disabled")
         if not advanced and self._var_domain.get():
             self._var_host.set("")
+
+    def _suggest(self) -> None:
+        domain = self._var_domain.get().strip() or self._var_host.get().strip()
+        if not domain:
+            messagebox.showinfo("Suggest", "Enter a domain first.", parent=self)
+            return
+        hint = self._var_hint.get().strip() or None
+        advanced = self._var_advanced.get()
+        self._suggest_pending = True
+        self._btn_suggest.configure(state="disabled", text="Suggesting…")
+        threading.Thread(
+            target=self._suggest_worker, args=(domain, hint, advanced), daemon=True
+        ).start()
+
+    def _suggest_worker(self, domain: str, hint: str | None, advanced: bool) -> None:
+        try:
+            suggestion = None if hint else regex_suggest.suggest_local(domain)
+            if suggestion is None:
+                suggestion = regex_suggest.suggest_via_claude(domain, hint, advanced=advanced)
+            suggestion = regex_suggest.validate(suggestion, advanced=advanced)
+        except ConfigError as err:
+            self._marshal(self._suggest_failed, str(err))
+            return
+        self._marshal(self._suggest_done, suggestion, domain)
+
+    def _marshal(self, func: Callable[..., None], *args: object) -> None:
+        """`self.after(...)`, but tolerant of the window having been torn down mid-flight."""
+        try:
+            self.after(0, func, *args)
+        except tk.TclError:
+            pass
+
+    def _suggest_failed(self, message: str) -> None:
+        if not self.winfo_exists():
+            return
+        self._suggest_pending = False
+        self._btn_suggest.configure(state="normal", text="Suggest…")
+        messagebox.showinfo("Suggest", message, parent=self)
+
+    def _suggest_done(self, suggestion: Suggestion, domain: str) -> None:
+        if not self.winfo_exists():
+            return
+        self._suggest_pending = False
+        self._btn_suggest.configure(state="normal", text="Suggest…")
+        dialog = SuggestPreviewDialog(self, suggestion, domain)
+        self.wait_window(dialog)
+        if dialog.result is None:
+            return
+        if dialog.result.path is not None:
+            self._var_path.set(dialog.result.path)
+        if self._var_advanced.get() and dialog.result.host is not None:
+            self._var_host.set(dialog.result.host)
 
     def _save(self) -> None:
         try:

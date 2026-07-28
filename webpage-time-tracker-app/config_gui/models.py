@@ -22,14 +22,21 @@ class ConfigError(ValueError):
     """A config value the userscript could not act on."""
 
 
-def host_regex(domain: str) -> str:
-    """`youtube.com` → `(^|\\.)youtube\\.com$` — the domain and its subdomains."""
-    cleaned = domain.strip().lower()
+def normalize_domain(value: str) -> str:
+    """Strip scheme/path/port/`www.` and lowercase — shared by `host_regex` and suggestions."""
+    cleaned = value.strip().lower()
     cleaned = re.sub(r"^[a-z]+://", "", cleaned)
     cleaned = cleaned.split("/")[0]
+    cleaned = cleaned.split(":")[0]
     cleaned = cleaned.removeprefix("www.").strip(".")
     if not cleaned or not re.fullmatch(r"[a-z0-9.-]+", cleaned):
-        raise ConfigError(f"not a domain: {domain!r}")
+        raise ConfigError(f"not a domain: {value!r}")
+    return cleaned
+
+
+def host_regex(domain: str) -> str:
+    """`youtube.com` → `(^|\\.)youtube\\.com$` — the domain and its subdomains."""
+    cleaned = normalize_domain(domain)
     return rf"(^|\.){re.escape(cleaned)}$"
 
 

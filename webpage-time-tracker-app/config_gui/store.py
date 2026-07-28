@@ -30,6 +30,10 @@ def icons_dir() -> Path:
     return path
 
 
+def suggest_cache_path() -> Path:
+    return app_dir() / "suggest-cache.json"
+
+
 def load() -> Config:
     """The stored config, or defaults if there is none / it is unreadable."""
     path = config_path()
@@ -41,20 +45,24 @@ def load() -> Config:
         return Config()
 
 
-def save(config: Config) -> Path:
-    """Write atomically — the server may read this file mid-write otherwise."""
-    config.validated()
-    path = config_path()
-    payload = json.dumps(config.to_dict(), indent=2) + "\n"
-    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=".config-", suffix=".json")
+def write_atomic(path: Path, text: str) -> None:
+    """Write `text` to `path` via a tmp-file + `os.replace` — no reader sees a partial write."""
+    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.stem}-", suffix=".tmp")
     tmp = Path(tmp_name)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
-            handle.write(payload)
+            handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(tmp, path)
     except BaseException:
         tmp.unlink(missing_ok=True)
         raise
+
+
+def save(config: Config) -> Path:
+    """Write atomically — the server may read this file mid-write otherwise."""
+    config.validated()
+    path = config_path()
+    write_atomic(path, json.dumps(config.to_dict(), indent=2) + "\n")
     return path
