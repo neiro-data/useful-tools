@@ -56,7 +56,7 @@
   const CONFIG_FETCHED_KEY = 'wtt.config.fetchedAt';
   const CONFIG_URL = 'http://127.0.0.1:8787/config.json';
   // The refresh runs on every page, so it is rate-limited across all tabs.
-  const CONFIG_REFRESH_MS = 60000;
+  const CONFIG_REFRESH_MS = 30000;
 
   function gmGet(key, fallback) {
     try {
@@ -173,13 +173,16 @@
   // ---------------------------------------------------------------------------
   if (!CONFIG.rules.some((rule) => rule.host.test(location.hostname))) return;
 
-  // A config that lands after startup applies to this page immediately. A site
-  // added for some *other* host can't — the early-out above already ran — which
-  // is why changing settings asks for a tab reload.
+  // A config that lands after startup applies to this page immediately, so an
+  // already-open tab converges on an updated limit within one refresh cycle
+  // (poll below, rate-limited to once per CONFIG_REFRESH_MS across tabs). A
+  // site added for some *other* host can't — the early-out above already
+  // ran — which is why adding a new host still asks for a tab reload.
   onFreshConfig = (fresh) => {
     CONFIG = compile(fresh);
     render();
   };
+  setInterval(refreshConfig, CONFIG_REFRESH_MS);
 
   const STORE_KEY = 'wtt.state.v2';
   const budgetSeconds = (rule) => Math.max(1, Math.round(rule.limitMinutes * 60));
