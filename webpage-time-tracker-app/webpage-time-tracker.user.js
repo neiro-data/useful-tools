@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Webpage Time Tracker
 // @namespace    https://github.com/neiro-data/useful-tools
-// @version      0.2.0
+// @version      0.3.0
 // @description  Tracks focused time per time-sink site against that site's own daily limit, then escalates nudges once you go over.
 // @author       neiro
 // @match        *://*/*
@@ -10,15 +10,23 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_registerMenuCommand
+// @grant        GM_xmlhttpRequest
+// @connect      127.0.0.1
 // ==/UserScript==
 
 (function () {
   'use strict';
 
   // ---------------------------------------------------------------------------
-  // CONFIG — the only part meant to be edited.
+  // CONFIG
+  //
+  // Settings live in ~/.webpage-time-tracker/config.json, edited with the
+  // Tkinter app (`uv run wtt-config`) and served on loopback while its window is
+  // open. This script never blocks on that: it renders from the copy cached in
+  // GM storage, then refreshes it in the background. The defaults below are the
+  // fallback for a fresh install with no cache and no server.
   // ---------------------------------------------------------------------------
-  const CONFIG = {
+  const DEFAULTS = {
     // The day rolls over at this local hour. 4am rather than midnight, so
     // "it resets in two minutes" isn't available at 23:58.
     dayStartHour: 4,
@@ -29,28 +37,118 @@
     // Days of per-site history kept. Nothing enforces against it — it exists so
     // "am I actually improving?" is answerable.
     historyDays: 14,
-    tickMs: 1000,
-    saveEverySeconds: 5,
 
-    // Each rule carries its own daily limit — there is no pooled budget.
+    // Each site carries its own daily limit — there is no pooled budget.
     // host is matched against location.hostname, path against location.pathname.
     // Omit path to track the whole site.
-    rules: [
-      {
-        name: 'YouTube Shorts',
-        host: /(^|\.)youtube\.com$/,
-        path: /^\/shorts(\/|$)/,
-        limitMinutes: 15,
-      },
-      {
-        name: 'Instagram Reels',
-        host: /(^|\.)instagram\.com$/,
-        path: /^\/reels?(\/|$)/,
-        limitMinutes: 15,
-      },
-      { name: 'X', host: /(^|\.)(x|twitter)\.com$/, limitMinutes: 30 },
+    sites: [
+      { name: 'YouTube Shorts', host: '(^|\\.)youtube\\.com$', path: '^/shorts(/|$)', limitMinutes: 15 },
+      { name: 'Instagram Reels', host: '(^|\\.)instagram\\.com$', path: '^/reels?(/|$)', limitMinutes: 15 },
+      { name: 'X', host: '(^|\\.)(x|twitter)\\.com$', limitMinutes: 30 },
     ],
   };
+
+  // Not user-settable — implementation detail of the clock, not a preference.
+  const TICK_MS = 1000;
+  const SAVE_EVERY_SECONDS = 5;
+
+  const CONFIG_KEY = 'wtt.config.v1';
+  const CONFIG_FETCHED_KEY = 'wtt.config.fetchedAt';
+  const CONFIG_URL = 'http://127.0.0.1:8787/config.json';
+  // The refresh runs on every page, so it is rate-limited across all tabs.
+  const CONFIG_REFRESH_MS = 60000;
+
+  function gmGet(key, fallback) {
+    try {
+      const raw = GM_getValue(key, null);
+      if (raw === null || raw === undefined) return fallback;
+      return typeof raw === 'string' && key !== CONFIG_FETCHED_KEY ? JSON.parse(raw) : raw;
+    } catch (err) {
+      return fallback;
+    }
+  }
+
+  function gmSet(key, value) {
+    try {
+      GM_setValue(key, value);
+    } catch (err) {
+      /* storage unavailable — this run just uses what it has */
+    }
+  }
+
+  // A bad pattern from the config file must not take the whole script down at
+  // document-start, so each site is compiled independently and a broken one is
+  // dropped rather than thrown.
+  function compile(raw) {
+    const source = raw && Array.isArray(raw.sites) ? raw : DEFAULTS;
+    const pick = (key, min, max) => {
+      const value = source[key];
+      return typeof value === 'number' && isFinite(value) && value >= min && value <= max
+        ? value
+        : DEFAULTS[key];
+    };
+    const rules = [];
+    for (const site of source.sites) {
+      if (!site || typeof site.name !== 'string' || !site.name) continue;
+      if (typeof site.limitMinutes !== 'number' || !(site.limitMinutes > 0)) continue;
+      try {
+        rules.push({
+          name: site.name,
+          host: new RegExp(site.host),
+          path: site.path ? new RegExp(site.path) : null,
+          limitMinutes: site.limitMinutes,
+        });
+      } catch (err) {
+        /* unusable pattern — skip this site */
+      }
+    }
+    return {
+      dayStartHour: pick('dayStartHour', 0, 23),
+      idleSeconds: pick('idleSeconds', 5, 86400),
+      snoozeMinutes: pick('snoozeMinutes', 1, 1440),
+      historyDays: pick('historyDays', 1, 365),
+      rules: rules.length ? rules : compile(DEFAULTS).rules,
+    };
+  }
+
+  let CONFIG = compile(gmGet(CONFIG_KEY, DEFAULTS));
+
+  // Called with the fresh config once the main path is ready to apply it. Left
+  // null on pages that early-out below — the cache is still updated, so a
+  // reload picks up a site that was only just added.
+  let onFreshConfig = null;
+
+  function refreshConfig() {
+    if (typeof GM_xmlhttpRequest !== 'function') return;
+    const last = gmGet(CONFIG_FETCHED_KEY, 0);
+    if (typeof last === 'number' && Date.now() - last < CONFIG_REFRESH_MS) return;
+    gmSet(CONFIG_FETCHED_KEY, Date.now());
+    try {
+      GM_xmlhttpRequest({
+        method: 'GET',
+        url: CONFIG_URL,
+        timeout: 2000,
+        onload: (response) => {
+          if (response.status !== 200) return;
+          let fresh = null;
+          try {
+            fresh = JSON.parse(response.responseText);
+          } catch (err) {
+            return;
+          }
+          if (!fresh || !Array.isArray(fresh.sites) || !fresh.sites.length) return;
+          gmSet(CONFIG_KEY, fresh);
+          if (onFreshConfig) onFreshConfig(fresh);
+        },
+        onerror: () => {},
+        ontimeout: () => {},
+      });
+    } catch (err) {
+      /* GM_xmlhttpRequest unavailable — the cache stands */
+    }
+  }
+
+  refreshConfig();
 
   // Escalation ladder for a single site, highest first — the first entry whose
   // `at` that site's ratio has reached wins. Below 1.0 there is no level: the
@@ -74,6 +172,14 @@
   // routing), so path matching has to stay dynamic.
   // ---------------------------------------------------------------------------
   if (!CONFIG.rules.some((rule) => rule.host.test(location.hostname))) return;
+
+  // A config that lands after startup applies to this page immediately. A site
+  // added for some *other* host can't — the early-out above already ran — which
+  // is why changing settings asks for a tab reload.
+  onFreshConfig = (fresh) => {
+    CONFIG = compile(fresh);
+    render();
+  };
 
   const STORE_KEY = 'wtt.state.v2';
   const budgetSeconds = (rule) => Math.max(1, Math.round(rule.limitMinutes * 60));
@@ -425,7 +531,7 @@
     const now = Date.now();
     // Real elapsed time, not the nominal interval — but clamped, so waking the
     // laptop after two hours doesn't inject two hours of "usage".
-    const delta = Math.min(Math.max(now - lastTick, 0), CONFIG.tickMs * 2);
+    const delta = Math.min(Math.max(now - lastTick, 0), TICK_MS * 2);
     lastTick = now;
 
     const key = dayKey(now);
@@ -440,13 +546,13 @@
     if (rule) {
       state.days[key][rule.name] = (state.days[key][rule.name] || 0) + delta / 1000;
       unsaved += delta / 1000;
-      if (unsaved >= CONFIG.saveEverySeconds) flush();
+      if (unsaved >= SAVE_EVERY_SECONDS) flush();
     }
 
     render();
   }
 
-  setInterval(tick, CONFIG.tickMs);
+  setInterval(tick, TICK_MS);
   render();
 
   // ---------------------------------------------------------------------------
