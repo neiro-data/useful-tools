@@ -29,14 +29,48 @@ spend on time-sink websites and escalates nudges once you pass that site's daily
 
 1. Install [Userscripts](https://github.com/quoid/userscripts) (free, App Store) and enable it in
    Safari → Settings → Extensions.
-2. Point it at a scripts directory, then add `dist/webpage-time-tracker.safari.user.js`.
+2. Open the Userscripts toolbar popup, create a new script, and paste the contents of
+   `dist/webpage-time-tracker.safari.user.js`. (You can also drop the file straight into whichever
+   scripts directory you pointed the extension at in its settings — the location is one *you* pick,
+   there is no fixed path to copy to.)
 3. Visit a tracked site.
+4. Run the checklist under *Verifying the Safari install* below — two of its assumptions are
+   Safari-specific and worth confirming once.
 
 The Safari build differs in three ways, all handled by its adapter: storage is promise-based rather
-than synchronous, it declares `@inject-into page` so the SPA history patch runs in the page world,
-and it omits `@connect` (which Safari has no equivalent for). If Safari's local-network policy
-blocks the loopback settings server, the script falls back to its cached config and backs off its
-polling rather than failing.
+than synchronous, it declares `@inject-into content` (Userscripts.app exposes the `GM.*` APIs only
+to the content world — see the note below), and it omits `@connect` (which Safari has no equivalent
+for). If Safari's local-network policy blocks the loopback settings server, the script falls back to
+its cached config and backs off its polling rather than failing.
+
+> **`@inject-into content` is load-bearing.** With `page`, every `GM.*` call throws, the adapter
+> swallows it, and the script silently runs on its baked-in `DEFAULTS`: the badge counts, but
+> nothing persists across a reload and the settings app is never contacted. The adapter now logs a
+> single `[wtt] GM storage unavailable` warning if that ever recurs. The cost of `content` is that
+> the `history.pushState` patch no longer sees the page's navigations; the 1s tick already
+> re-derives the active rule from `location.pathname`, so SPA routing is still picked up.
+
+#### Verifying the Safari install
+
+Reinstalling? Delete the old script in Userscripts first — a stale copy under the same name shadows
+the new one.
+
+1. **GM is live.** Safari → Settings → Advanced → *Show features for web developers*. On a tracked
+   site, Develop → Show JavaScript Console, then reload. There must be **no** `[wtt] GM storage
+   unavailable` warning.
+2. **Counts persist.** Spend ~60s on a tracked site (window focused, mouse moving), note the badge,
+   reload. It must resume at roughly the same number, not `0m`.
+3. **State is shared across origins.** Visit a second tracked site, then return to the first — the
+   first site's number must still be there. The per-site counter design rests on this.
+4. **Start the settings app** (`uv run wtt-config`) and leave the window open.
+5. **The server is reachable.** Open `http://127.0.0.1:8787/config.json` in a Safari tab; you should
+   see JSON. If macOS asks for *Local Network* access, allow it (System Settings → Privacy &
+   Security → Local Network → Safari). If this fails, the script is fine — it just stays on its
+   cached config.
+6. **The GUI drives the timer.** With a tracked tab already open and *not* reloaded, change that
+   site's limit in the app and save. Within 30s the badge's denominator must change on its own, and
+   going over must fire the overlay.
+7. Adding a *brand-new* site still needs a tab reload — by design; the host early-out already ran.
 
 Settings live in `~/.webpage-time-tracker/config.json` and are edited with the settings app below.
 The `DEFAULTS` block at the top of the script is only the fallback for a fresh install with no
@@ -170,8 +204,9 @@ MV3 extension, cross-machine sync, usage charts, editing the global settings (`d
 `idleSeconds`, …) from the GUI — the app manages the site list only, the rest are still file-level
 values.
 
-The Safari build ships but has **not been exercised in a real Safari yet.** Two assumptions still
-need confirming on the first install: that Userscripts.app storage is genuinely shared across
-origins (the whole per-site counter design rests on it), and whether the loopback settings server is
-reachable at all under Safari's local-network policy. The script degrades to cached config if it
-isn't.
+The Safari build has been installed and seen counting on a real Safari, but the first release
+shipped with `@inject-into page`, which silently disabled all storage and config fetching (see the
+setup note above). With that fixed, two assumptions are still unconfirmed and are steps 3 and 5 of
+*Verifying the Safari install*: that Userscripts.app storage is genuinely shared across origins (the
+whole per-site counter design rests on it), and whether the loopback settings server is reachable at
+all under Safari's local-network policy. The script degrades to cached config if it isn't.

@@ -145,3 +145,30 @@ reason v0.1 picked Tampermonkey) and **shared core + thin adapters** over a `saf
 - Verified: ruff, ruff format, mypy strict, 158 pytest, `build.py --check`, `node --check` on both
   dists. **Neither browser tested at runtime** — Safari's cross-origin storage and loopback
   reachability are still unconfirmed assumptions.
+
+## 2026-07-30 — `fix/safari-inject-into-content` (from `feat/safari-shared-core`)
+
+Safari installed and visibly counted, but the settings GUI never reached it. User asked whether it
+was supposed to — yes, `refreshConfig` is in the shared core, both builds run it.
+
+- Root cause: `header-safari.js` shipped `@inject-into page`. Userscripts.app docs (confirmed by
+  fetching the repo README, not assumed): *"GM apis are only available when using `content`"*. In
+  the page world `GM.getValue/setValue` threw into the adapter's `catch` and `fetchConfig` early-
+  returned on `typeof GM === 'undefined'` — so **no config was ever fetched and nothing persisted**,
+  while the script ran happily on its baked-in DEFAULTS. Shorts "worked" because DEFAULTS has it.
+  A whole release of silent failure that looked like success.
+- Fix is one word (`page` → `content`). The `history.pushState` patch was the only reason for
+  `page`, and it isn't load-bearing: the 1s tick re-derives the active rule from `location.pathname`
+  (≤1s attribution delay). Commented that in `core.js` so it isn't "fixed" back.
+- Made the failure loud: `warnOnce()` in `adapter-safari.js`, guarding all three GM entry points
+  with explicit `typeof` checks rather than leaning on the catch (which also covers a recoverable
+  `JSON.parse` failure).
+- Two regression tests in `test_build.py` pinning `@inject-into content` + the grants, and the
+  once-only warn latch. This bug had no test.
+- README: rewrote the Safari setup (the fixed `~/Library/Containers/...` `cp` path in the previous
+  entry does not exist — the scripts directory is user-chosen; lead with pasting into the popup),
+  added a 7-step *Verifying the Safari install* checklist, and corrected the closing v0.4 note.
+- No specialist agents — session config disallows spawning them unprompted; declared, not skipped.
+- Verified: ruff, ruff format, mypy strict, 160 pytest, `build.py --check`, `node --check` on both
+  dists. The Safari checklist itself still needs a human run — steps 3 (cross-origin storage) and 5
+  (loopback under Safari's local-network policy) remain unconfirmed.
