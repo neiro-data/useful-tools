@@ -11,8 +11,28 @@
 
   const CONFIG_FETCHED_KEY = 'wtt.config.fetchedAt';
 
+  // A missing GM API is not recoverable and used to fail silently: every read
+  // fell through to its fallback, so the script ran on its baked-in DEFAULTS
+  // and looked healthy while persisting nothing. Say so once — once, not once
+  // per tick — so the next install misconfigured this way is obvious.
+  let warnedNoGM = false;
+  function warnOnce() {
+    if (warnedNoGM) return;
+    warnedNoGM = true;
+    console.warn(
+      '[wtt] GM storage unavailable — nothing will persist and the settings app ' +
+        'will be ignored. Userscripts.app exposes GM only to @inject-into content.',
+    );
+  }
+
   const adapter = {
     async getValue(key, fallback) {
+      // Checked explicitly rather than leaning on the catch below, which also
+      // covers an ordinary JSON.parse failure — a different, recoverable thing.
+      if (typeof GM === 'undefined' || typeof GM.getValue !== 'function') {
+        warnOnce();
+        return fallback;
+      }
       try {
         const raw = await GM.getValue(key, null);
         if (raw === null || raw === undefined) return fallback;
@@ -25,6 +45,10 @@
     },
 
     async setValue(key, value) {
+      if (typeof GM === 'undefined' || typeof GM.setValue !== 'function') {
+        warnOnce();
+        return;
+      }
       try {
         await GM.setValue(key, value);
       } catch (err) {
@@ -33,7 +57,10 @@
     },
 
     async fetchConfig(url, timeoutMs) {
-      if (typeof GM === 'undefined' || typeof GM.xmlHttpRequest !== 'function') return null;
+      if (typeof GM === 'undefined' || typeof GM.xmlHttpRequest !== 'function') {
+        warnOnce();
+        return null;
+      }
       try {
         const response = await GM.xmlHttpRequest({ method: 'GET', url, timeout: timeoutMs });
         return response && response.status === 200 ? response.responseText : null;

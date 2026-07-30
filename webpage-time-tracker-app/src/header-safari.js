@@ -7,7 +7,7 @@
 // @match        *://*/*
 // @run-at       document-start
 // @noframes
-// @inject-into  page
+// @inject-into  content
 // @grant        GM.getValue
 // @grant        GM.setValue
 // @grant        GM.xmlHttpRequest
