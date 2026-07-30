@@ -2,14 +2,15 @@
 
 ## Resume
 
-A personal **Tampermonkey userscript** (plain JavaScript, no build step, no dependencies) that
-tracks how long you actually spend on time-sink websites and escalates nudges once you pass that
-site's daily limit.
+A personal **userscript** (plain JavaScript, no dependencies) that tracks how long you actually
+spend on time-sink websites and escalates nudges once you pass that site's daily limit.
 
-- **Stack:** one self-contained file — `webpage-time-tracker.user.js`. No `package.json`, no
-  bundler, nothing to install beyond Tampermonkey itself. Alongside it, an optional Python
-  (`uv` + Tkinter) settings app for managing the site list without editing the script.
-- **Target:** Chrome (Tampermonkey). Personal use only — not published to any store.
+- **Stack:** a shared core plus a thin per-platform adapter in `src/`, concatenated into two
+  ready-to-install userscripts in `dist/` by a stdlib-only Python script. No `package.json`, no
+  bundler, no runtime dependencies. Alongside it, an optional Python (`uv` + Tkinter) settings app
+  for managing the site list without editing the script.
+- **Target:** Chrome (Tampermonkey) and Safari (Userscripts.app). Personal use only — not published
+  to any store.
 - **Key idea:** every tracked site carries **its own daily limit**, and the counter for the site
   you're on is **always visible** — dimmed while you're under half of it, opaque as it climbs.
 - **History:** 14 days of per-site totals are kept, so "am I improving?" is answerable. Nothing is
@@ -17,10 +18,25 @@ site's daily limit.
 
 ### Setup
 
+**Chrome**
+
 1. Install [Tampermonkey](https://www.tampermonkey.net/) in Chrome.
 2. Tampermonkey → Dashboard → **+** (new script) → paste the contents of
-   `webpage-time-tracker.user.js` → save.
+   `dist/webpage-time-tracker.user.js` → save.
 3. Visit a tracked site. The badge is there immediately, showing that site's used/limit.
+
+**Safari**
+
+1. Install [Userscripts](https://github.com/quoid/userscripts) (free, App Store) and enable it in
+   Safari → Settings → Extensions.
+2. Point it at a scripts directory, then add `dist/webpage-time-tracker.safari.user.js`.
+3. Visit a tracked site.
+
+The Safari build differs in three ways, all handled by its adapter: storage is promise-based rather
+than synchronous, it declares `@inject-into page` so the SPA history patch runs in the page world,
+and it omits `@connect` (which Safari has no equivalent for). If Safari's local-network policy
+blocks the loopback settings server, the script falls back to its cached config and backs off its
+polling rather than failing.
 
 Settings live in `~/.webpage-time-tracker/config.json` and are edited with the settings app below.
 The `DEFAULTS` block at the top of the script is only the fallback for a fresh install with no
@@ -57,9 +73,15 @@ and `ANTHROPIC_API_KEY` is set, it falls back to the `anthropic` SDK (install th
 
 #### Development
 
+Edit `src/`, never `dist/` — `dist/` is generated, and a test asserts it matches a fresh render of
+`src/`, so a stale `dist/` fails the suite.
+
 ```sh
+uv run python tools/build.py            # regenerate dist/ after any src/ change
+uv run python tools/build.py --check    # verify dist/ is current, write nothing
 uv run ruff check . && uv run ruff format --check . && uv run mypy . && uv run pytest
-node --check webpage-time-tracker.user.js
+node --check dist/webpage-time-tracker.user.js
+node --check dist/webpage-time-tracker.safari.user.js
 ```
 
 ## How time is counted
@@ -114,29 +136,42 @@ and the script skips a site whose pattern won't compile rather than dying on it.
 The script's `@match` is `*://*/*` deliberately, so the site list lives in exactly one place; on any
 hostname matching no site it bails out immediately and costs the page nothing.
 
-## Tampermonkey menu
+## Menu
 
-Available from the Tampermonkey icon while on a tracked site:
+Click the badge on a tracked site. The menu renders inside the script's own closed shadow root, so
+it works identically on both browsers:
 
 - **status** — today's used/limit per site, plus a 7-day all-sites trend
 - **reset this site's counter** — the current site back to zero
 - **grant 10 more minutes here** — deliberate override, current site only
 
+On Chrome the same three commands are *also* registered in the Tampermonkey icon menu. Safari's
+Userscripts.app has no equivalent API, which is why the badge menu exists.
+
 ## Notes and limits
 
-- **Cross-origin state** uses `GM_setValue`, not `localStorage`. `localStorage` is per-origin and
-  therefore cannot hold counters readable from YouTube, Instagram *and* X. Stored under
-  `wtt.state.v2` as `{ days: { "YYYY-MM-DD": { "<site name>": seconds } } }`, pruned on read.
+- **Cross-origin state** uses the userscript host's own storage, not `localStorage`. `localStorage`
+  is per-origin and therefore cannot hold counters readable from YouTube, Instagram *and* X. Stored
+  under `wtt.state.v2` as `{ days: { "YYYY-MM-DD": { "<site name>": seconds } } }`, pruned on read.
   Renaming a rule starts that site's history over.
+- **Storage writes are serialized** through a single promise chain. Safari's API is asynchronous, so
+  without it two overlapping writes could interleave and silently drop counted seconds. One
+  consequence: a write in flight when the tab unloads may not land, costing at most ~6s.
 - **SPA routing:** entering `youtube.com/shorts/…` fires no page load, so the script patches
   `history.pushState`/`replaceState` and listens to `popstate`. The per-second tick is a backstop if
-  the patch doesn't take in Tampermonkey's sandbox.
-- **This is a speed bump, not a lock.** Tampermonkey can be disabled in a couple of clicks. It works
-  as a self-nudge, not as a commitment device.
+  the patch doesn't take in the host's sandbox.
+- **This is a speed bump, not a lock.** The userscript host can be disabled in a couple of clicks.
+  It works as a self-nudge, not as a commitment device.
 - **Desktop only.** Deliberately — mobile browsers can't run this.
 
-## Not implemented (v0.3)
+## Not implemented (v0.4)
 
-Safari port (needs an Xcode app wrapper and lacks `chrome.idle`), MV3 extension, cross-machine sync,
-usage charts, editing the global settings (`dayStartHour`, `idleSeconds`, …) from the GUI — the app
-manages the site list only, the rest are still file-level values.
+MV3 extension, cross-machine sync, usage charts, editing the global settings (`dayStartHour`,
+`idleSeconds`, …) from the GUI — the app manages the site list only, the rest are still file-level
+values.
+
+The Safari build ships but has **not been exercised in a real Safari yet.** Two assumptions still
+need confirming on the first install: that Userscripts.app storage is genuinely shared across
+origins (the whole per-site counter design rests on it), and whether the loopback settings server is
+reachable at all under Safari's local-network policy. The script degrades to cached config if it
+isn't.
