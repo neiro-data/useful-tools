@@ -78,6 +78,24 @@ Bug: per-site limits never updated. Two symptoms, one root cause + one gap.
 - Verified: ruff format/check, mypy strict, 40 pytest tests, `node --check`. GUI + Chrome behaviour
   still needs manual confirmation.
 
+## 2026-07-28 — `feat/site-dialog-regex-suggest` (from `webpage-time-tracker`)
+
+Backfilled — this entry was only ever written to the repo-root log, not here.
+
+Suggest button in the Add/Edit site dialog to fill Path regex from a domain, local table first,
+`claude-haiku-4-5` fallback.
+
+- Step 0 verification killed part of the design: `models.host_regex()` already derives the host
+  pattern from a plain domain, so the planned curated host table was dropped as redundant. Target
+  narrowed to Path regex.
+- `python-pro` — new `config_gui/regex_suggest.py` (KNOWN_PATHS, Claude fallback, disk cache,
+  validation, preview samples), `SuggestPreviewDialog` + threaded call, `models.normalize_domain()`
+  and `store.write_atomic()` extracted.
+- `code-reviewer` — 8 findings, two serious: `validate()` accepted `youtube.com$` and `.*$` as host
+  regexes (matching `evilyoutube.com` / everything), and every correct path suggestion showed a
+  false red row in the preview, defeating the check meant to catch the first.
+- All 8 fixed and re-verified. ruff + mypy strict clean, 124 tests.
+
 ## feat/suggest-cli-auth — Suggest without an API key + dialog UX
 
 - Suggest was unusable: `suggest_via_claude` demanded `ANTHROPIC_API_KEY`, which the user doesn't have
@@ -98,3 +116,32 @@ Bug: per-site limits never updated. Two symptoms, one root cause + one gap.
   the `SuggestUnavailable` contract, killing the worker thread with the button stuck on "Suggesting…".
   Fixed with an `except OSError` arm + regression test; also noted in-code that `--allowed-tools ""` is
   defense-in-depth, not a sandbox. 147 tests green.
+
+## 2026-07-30 — `feat/safari-shared-core` (from `main`)
+
+Safari port. Chose **Userscripts.app** over a real Web Extension (no Xcode, no signing tax — the same
+reason v0.1 picked Tampermonkey) and **shared core + thin adapters** over a `safari/` fork.
+
+- Two of the README's stated blockers were stale: `chrome.idle` was never used (idle detection is
+  already DIY via activity listeners), and no `chrome.*` appears anywhere. The real blockers were
+  async storage, `GM_xmlhttpRequest`/`@connect`, and `GM_registerMenuCommand`.
+- Split: `src/{core.js,adapter-gm.js,adapter-safari.js,header-*.js}` → `tools/build.py` (stdlib only,
+  deterministic, `--check` flag) → `dist/{...user.js,...safari.user.js}`. Root `.user.js` deleted.
+- Storage went sync → async, which rippled through everything. All mutations serialize on one promise
+  chain (`ioChain`); `flush()` subtracts only the captured delta *after* the write resolves.
+- `architect-orchestrator` caught what I'd missed: `refreshConfig` reads/writes the cross-tab
+  rate-limit stamp pre-early-out on every page, so un-awaited the 30s throttle degenerates into
+  unbounded refetching. It also talked me out of lowering the Safari save interval — ~6s worst-case
+  loss is below the noise floor of a 15-min limit, and 1 write/sec/tab is a bad trade.
+- `code-reviewer` found 3 defects. The HIGH one was **my** brief's fault: I specified "stop polling
+  after 3 failures", but the config server being down is the normal case (the GUI is rarely open), so
+  any long-lived tab gave up permanently within 90s. Replaced with exponential backoff.
+- That fix then introduced a worse regression, caught on my own read-back: the now self-scheduling
+  `refreshConfig` runs *before* the host early-out, so with `@match *://*/*` every tab on every
+  website installed a forever-timer against the loopback server. Gated on a `pollingStarted` flag set
+  only after the early-out. Added an ordering test pinning it — that regression had no test.
+- Agents: architect-orchestrator → python-pro → test-automator (independent) → code-reviewer →
+  fresh python-pro ×2 via scratchpad handoff files, never resumed.
+- Verified: ruff, ruff format, mypy strict, 158 pytest, `build.py --check`, `node --check` on both
+  dists. **Neither browser tested at runtime** — Safari's cross-origin storage and loopback
+  reachability are still unconfirmed assumptions.
