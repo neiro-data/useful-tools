@@ -375,6 +375,11 @@
     // startup would miss it. The tick below would catch it within a second on
     // its own; patching history exists so the overlay clears the instant you
     // navigate off a tracked route rather than lingering.
+    //
+    // Best-effort, and a no-op on Safari: Userscripts.app only exposes the GM
+    // APIs to scripts injected into `content`, i.e. an isolated world whose
+    // `history` is not the page's. The tick is the real mechanism; this is a
+    // latency optimisation for Chrome, never a correctness requirement.
     // -------------------------------------------------------------------------
     function onNavigate() {
       lastActivity = Date.now();

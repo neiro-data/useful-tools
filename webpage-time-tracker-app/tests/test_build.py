@@ -166,3 +166,30 @@ def test_cli_check_exits_nonzero_when_stale(tmp_path: Path) -> None:
     )
     assert result.returncode == 1
     assert "stale" in result.stderr
+
+
+def test_safari_header_injects_into_content() -> None:
+    """Regression: the Safari build shipped `@inject-into page`, and
+    Userscripts.app exposes the GM APIs only to scripts injected into
+    `content`. In the page world every GM call threw, the adapter swallowed
+    it, and the script ran on its baked-in DEFAULTS: nothing persisted and the
+    settings server was never contacted, while the badge looked healthy.
+    """
+    header = (build.SRC_DIR / "header-safari.js").read_text(encoding="utf-8")
+
+    assert "@inject-into  content" in header
+    assert "@inject-into  page" not in header
+    # The grants the adapter depends on must still be declared.
+    for grant in ("GM.getValue", "GM.setValue", "GM.xmlHttpRequest"):
+        assert f"@grant        {grant}" in header
+
+
+def test_safari_adapter_warns_when_gm_is_missing() -> None:
+    """The failure above was silent for a whole release. A missing GM API is
+    unrecoverable, so it must be reported — once, not once per storage call."""
+    adapter = (build.SRC_DIR / "adapter-safari.js").read_text(encoding="utf-8")
+
+    assert "console.warn" in adapter
+    assert "warnedNoGM" in adapter  # the once-only latch
+    # Every entry point into the GM API guards, not just the fetch path.
+    assert adapter.count("warnOnce()") >= 3
