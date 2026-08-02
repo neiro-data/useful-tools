@@ -1,0 +1,50 @@
+[project]
+name = "html-to-epub"
+version = "0.1.0"
+description = "Convert clean HTML into a valid, deterministic EPUB 3"
+readme = "README.md"
+authors = [
+    { name = "neiro", email = "nelsonaeiro+github@gmail.com" }
+]
+requires-python = ">=3.11"
+dependencies = [
+    "ebooklib>=0.18",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=5.0.0",
+]
+
+[project.scripts]
+html2epub = "html_to_epub.cli:main"
+
+[build-system]
+requires = ["uv_build>=0.9.13,<0.10.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "mypy>=2.3.0",
+    "pytest>=9.1.1",
+    "ruff>=0.16.0",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "S", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src", "tests"]
+
+[[tool.mypy.overrides]]
+module = "ebooklib.*"
+ignore_missing_imports = true
