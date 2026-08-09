@@ -4,5 +4,8 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+*.egg-info/
+*.epub
+claude_interaction_steps.md
 *.epub
 claude_interaction_steps.md
