@@ -230,3 +230,23 @@ in quarter-hour blocks from 09:00, with 0–2 tags each.
 Settings are loaded via `pydantic-settings` from environment variables (prefix
 `TIME_TRACKER_`) and, optionally, a local `.env` file (not committed). Key settings include
 `database_path` (defaults to `time_tracker.db`) and CORS origins for the future React dev server.
+
+## Docker
+
+Run the full stack (backend API + frontend SPA behind nginx) with Docker Compose:
+
+```bash
+docker compose up --build
+```
+
+- Frontend: `http://localhost:8080` (API calls proxied under `/api` to the backend container).
+- Backend: also directly reachable at `http://localhost:8000` for debugging.
+- SQLite data persists in the `sqlite_data` named volume across `docker compose down`/`up`.
+- Override settings via `TIME_TRACKER_*` env vars, e.g. a `.env` file at the project root
+  (already git-ignored).
+- Categories are not auto-seeded on startup (opt-in, matches `app/seed.py`). Seed once after
+  first boot:
+
+  ```bash
+  docker compose exec backend python -m app.seed
+  ```

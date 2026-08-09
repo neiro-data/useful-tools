@@ -927,3 +927,6 @@ each serves.
   period to HTML and PDF against a scratch DB, rasterized both, compared against the app screenshot.
   Caught 2 defects that way (ISO-date axis labels unreadable at quarter granularity; PDF title
   justified when wrapped) that no test would have caught.
+
+## Docker Compose setup (2026-08-09)
+Branch `feat-time-tracker-docker` off `main` (local `branch-time-tracker-app` had no divergent commits/remote — used `main` instead). Explore agent gathered config facts (CORS/db path/API_PREFIX/build context), Plan agent designed the compose layout, docker-expert implemented: Dockerfile.backend, Dockerfile.frontend, docker/nginx.conf, docker-compose.yml, .dockerignore, README `## Docker` section. `docker compose config` validated; image build/run not exercised. PR #45 -> main.
