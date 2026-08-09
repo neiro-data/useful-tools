@@ -10,6 +10,7 @@ services:
       - ./time_tracker.db:/data/time_tracker.db
     ports:
       - "8000:8000"
+    mem_limit: 512m
 
   frontend:
     build:
@@ -20,3 +21,4 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    mem_limit: 128m
