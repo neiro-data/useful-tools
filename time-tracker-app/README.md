@@ -241,7 +241,11 @@ docker compose up --build
 
 - Frontend: `http://localhost:8080` (API calls proxied under `/api` to the backend container).
 - Backend: also directly reachable at `http://localhost:8000` for debugging.
-- SQLite data persists in the `sqlite_data` named volume across `docker compose down`/`up`.
+- SQLite data is bind-mounted from `./time_tracker.db` on the host into the backend container, so
+  Docker reads/writes the same file as a local `uv run uvicorn` run — it persists across
+  `docker compose down`/`up` and is editable/inspectable with any SQLite tool on the host. Don't
+  run the Docker backend and a local `uv run uvicorn` against it at the same time; SQLite doesn't
+  like concurrent writers.
 - Override settings via `TIME_TRACKER_*` env vars, e.g. a `.env` file at the project root
   (already git-ignored).
 - Categories are not auto-seeded on startup (opt-in, matches `app/seed.py`). Seed once after

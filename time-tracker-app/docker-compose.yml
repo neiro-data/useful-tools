@@ -7,7 +7,7 @@ services:
       TIME_TRACKER_DATABASE_PATH: /data/time_tracker.db
       TIME_TRACKER_CORS_ALLOW_ORIGINS: '["http://localhost:8080"]'
     volumes:
-      - sqlite_data:/data
+      - ./time_tracker.db:/data/time_tracker.db
     ports:
       - "8000:8000"
 
@@ -20,6 +20,3 @@ services:
     depends_on:
       backend:
         condition: service_healthy
-
-volumes:
-  sqlite_data:
