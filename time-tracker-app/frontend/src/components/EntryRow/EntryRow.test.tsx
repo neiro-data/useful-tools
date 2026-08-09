@@ -89,8 +89,14 @@ describe("EntryRow", () => {
     // it goes through local-time conversion, not a naive `toISOString().slice(0, 16)` (proven
     // TZ-sensitively in `utils/timeRange.test.ts`).
     const entry = makeEntry();
-    const [expectedStartDate, expectedStartTime] = toLocalDateTimeInput(entry.start_ts).split("T");
-    const [expectedEndDate, expectedEndTime] = toLocalDateTimeInput(entry.end_ts as string).split("T");
+    const [expectedStartDate, expectedStartTime] = toLocalDateTimeInput(entry.start_ts).split("T") as [
+      string,
+      string,
+    ];
+    const [expectedEndDate, expectedEndTime] = toLocalDateTimeInput(entry.end_ts as string).split("T") as [
+      string,
+      string,
+    ];
     const [expectedStartHour, expectedStartMinute] = expectedStartTime.split(":");
     const [expectedEndHour, expectedEndMinute] = expectedEndTime.split(":");
 
