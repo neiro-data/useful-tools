@@ -184,6 +184,30 @@ def test_safari_header_injects_into_content() -> None:
         assert f"@grant        {grant}" in header
 
 
+def test_playing_video_keeps_the_clock_running_past_idle() -> None:
+    """Regression: watching a fullscreen video produces no input events, so the
+    idle timeout used to stop the counter mid-video. A video that is actually
+    playing must count as activity, while the visible + focused guards stay so a
+    background-tab video never counts."""
+    core = (build.SRC_DIR / "core.js").read_text(encoding="utf-8")
+
+    # The playing-video probe exists and gates on a genuinely playing element.
+    assert "function isVideoPlaying()" in core
+    assert "!video.paused" in core
+    assert "!video.ended" in core
+    assert "video.readyState > 2" in core
+
+    # Idle no longer returns unconditionally — only when nothing is playing.
+    assert "if (idle && !isVideoPlaying()) return false;" in core
+
+    # The tab-scoping guards must remain: a playing video in a hidden or
+    # unfocused tab still must not count.
+    counting = core[core.index("function isCounting()") :]
+    counting = counting[: counting.index("\n    }")]
+    assert "document.visibilityState !== 'visible'" in counting
+    assert "document.hasFocus()" in counting
+
+
 def test_safari_adapter_warns_when_gm_is_missing() -> None:
     """The failure above was silent for a whole release. A missing GM API is
     unrecoverable, so it must be reported — once, not once per storage call."""
