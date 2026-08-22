@@ -329,12 +329,26 @@
       return null;
     }
 
+    // A playing video is genuine use even without input events — watching a
+    // fullscreen video produces no mousemove/keydown/scroll, so the idle
+    // timeout would otherwise stop the clock while you're actively watching.
+    // readyState > 2 (HAVE_FUTURE_DATA) excludes stalled/buffering players.
+    function isVideoPlaying() {
+      for (const video of document.querySelectorAll('video')) {
+        if (!video.paused && !video.ended && video.readyState > 2) return true;
+      }
+      return false;
+    }
+
     // Only the visible, focused tab counts — which also means two tabs on
-    // the same site can never double-count the same second.
+    // the same site can never double-count the same second. The visible +
+    // focused guards stay, so a video playing in a background tab never
+    // counts; idle only stops the clock when nothing is actually playing.
     function isCounting() {
       if (document.visibilityState !== 'visible') return false;
       if (!document.hasFocus()) return false;
-      if (Date.now() - lastActivity > CONFIG.idleSeconds * 1000) return false;
+      const idle = Date.now() - lastActivity > CONFIG.idleSeconds * 1000;
+      if (idle && !isVideoPlaying()) return false;
       return activeRule() !== null;
     }
 
