@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Understanding Deterministic Builds</title>
+  <meta name="author" content="Ada Example">
+</head>
+<body>
+  <div id="cookie-banner">We use cookies to improve your experience. Accept all cookies now.</div>
+  <nav>
+    <a href="/">Home</a>
+    <a href="/about">About</a>
+    <a href="/contact">Contact</a>
+  </nav>
+  <aside>
+    <h2>Related posts</h2>
+    <a href="/post-1">Related post one</a>
+    <a href="/post-2">Related post two</a>
+  </aside>
+  <article>
+    <h1>Understanding Deterministic Builds</h1>
+    <p>Deterministic builds are a foundational technique for making software supply chains
+    verifiable, because two independent parties can rebuild the exact same artifact from the
+    exact same source and compare the resulting bytes for an exact match.</p>
+    <p>One important detail is link handling: authors frequently reference other pages using
+    <a href="/relative/path">relative paths</a>, and those need to be rewritten against the
+    page's own URL so they still resolve correctly once the content is moved elsewhere, such as
+    into an EPUB chapter file.</p>
+    <p>Anchors within the same document, like a jump to <a href="#section-2">section two</a>,
+    also need careful handling so they keep working after extraction.</p>
+  </article>
+  <footer>
+    <p>Copyright 2024 Example Corp. All rights reserved. Privacy policy. Terms of service.</p>
+  </footer>
+</body>
+</html>

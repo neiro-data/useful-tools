@@ -21,3 +21,12 @@ draw.io (`.drawio`) ER diagram. It parses the SQL with `sqlglot` and emits `mxGr
 each table is a real draw.io table shape and each foreign key is a crow's-foot edge anchored to the
 individual column rows, not just the table boxes. See
 [`tool-sql-to-drawio/README.md`](tool-sql-to-drawio/README.md) for setup and usage.
+
+### [`tool-html-to-epub/`](tool-html-to-epub/)
+
+A **Python** CLI (`html2epub`) that converts clean HTML — a single file, or a directory of files read
+in filename order — into a valid, deterministic EPUB 3. It sanitizes the markup to XHTML-safe
+content, splits it into chapters at headings, derives a nested TOC and spine, and writes the archive
+through `EbookLib` behind an adapter layer. The same input and config always produce byte-identical
+output. Text-first: v1 excludes images, covers, JavaScript, CSS fidelity, and PDF. See
+[`tool-html-to-epub/README.md`](tool-html-to-epub/README.md) for setup and usage.

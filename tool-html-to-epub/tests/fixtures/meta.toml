@@ -1,0 +1,5 @@
+title = "My Test Book"
+author = "Test Author"
+language = "en"
+identifier = "urn:uuid:test-book-001"
+date = "2024-01-01T00:00:00Z"
