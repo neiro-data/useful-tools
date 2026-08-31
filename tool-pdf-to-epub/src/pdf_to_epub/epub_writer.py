@@ -10,7 +10,7 @@ from pathlib import Path
 from ebooklib import epub
 
 from pdf_to_epub.models import BookModel, TocNode
-from pdf_to_epub.xhtml import wrap_document
+from pdf_to_epub.xhtml import STYLESHEET_CSS, STYLESHEET_HREF, wrap_document
 
 _FIXED_DATE_TIME = (2000, 1, 1, 0, 0, 0)
 _MODIFIED_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
@@ -40,6 +40,14 @@ def _build_ebooklib_book(book_model: BookModel) -> epub.EpubBook:
     # dcterms:modified is emitted once by ebooklib itself, driven by the "mtime" write option
     # passed to epub.write_epub() below — do not add a second one here.
 
+    css = epub.EpubItem(
+        uid="style",
+        file_name=STYLESHEET_HREF,
+        media_type="text/css",
+        content=STYLESHEET_CSS.encode(),
+    )
+    book.add_item(css)
+
     items: dict[str, epub.EpubHtml] = {}
     for chapter in book_model.chapters:
         html_item = epub.EpubHtml(
@@ -52,10 +60,12 @@ def _build_ebooklib_book(book_model: BookModel) -> epub.EpubBook:
         # (raises internally and is swallowed, yielding a silently empty chapter). Encode to
         # bytes so lxml's HTML parser accepts the declaration.
         html_item.content = wrap_document(chapter.title, chapter.body_xhtml).encode()
+        html_item.add_link(href=STYLESHEET_HREF, rel="stylesheet", type="text/css")
         book.add_item(html_item)
         items[chapter.file_name] = html_item
 
     nav = epub.EpubNav()
+    nav.add_link(href=STYLESHEET_HREF, rel="stylesheet", type="text/css")
     book.add_item(nav)
     book.add_item(epub.EpubNcx())
 
