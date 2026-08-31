@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import filecmp
 import time
+import zipfile
 from pathlib import Path
 
 from pdf_to_epub.epub_writer import write_epub
 from pdf_to_epub.models import BookModel, Chapter, Metadata, TocNode, Warning
 from pdf_to_epub.validator import validate_epub_file
+from pdf_to_epub.xhtml import STYLESHEET_CSS
 
 _METADATA = Metadata(
     identifier="urn:uuid:test",
@@ -69,3 +71,23 @@ def test_write_epub_is_deterministic(tmp_path: Path) -> None:
     write_epub(book, output_b)
 
     assert filecmp.cmp(output_a, output_b, shallow=False)
+
+
+def test_stylesheet_is_shipped_and_linked_once(tmp_path: Path) -> None:
+    output_path = tmp_path / "book.epub"
+    write_epub(_book(), output_path)
+
+    with zipfile.ZipFile(output_path) as zf:
+        names = zf.namelist()
+        css_name = next(n for n in names if n.endswith("style/stylesheet.css"))
+        assert zf.read(css_name) == STYLESHEET_CSS.encode()
+
+        opf_name = next(n for n in names if n.endswith("content.opf"))
+        opf = zf.read(opf_name).decode()
+        assert 'media-type="text/css"' in opf
+
+        root = css_name.split("/")[0]
+        for name in names:
+            if name.startswith(f"{root}/") and name.endswith(".xhtml") and "nav" not in name:
+                content = zf.read(name).decode()
+                assert content.count("stylesheet.css") == 1

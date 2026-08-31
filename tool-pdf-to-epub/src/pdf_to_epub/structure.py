@@ -17,6 +17,9 @@ from pdf_to_epub.xhtml import assert_parseable, heading, paragraph
 _TERMINAL_PUNCT = '.?!:"'
 _CHAPTER_WORD_RE = re.compile(r"^(chapter|part|section|appendix)\b", re.IGNORECASE)
 _ROMAN_ONLY_RE = re.compile(r"^[ivxlcdmIVXLCDM]+$")
+_CAPTION_RE = re.compile(
+    r"^(Figure|Fig\.|Table|Chart|Listing|Algorithm)\s*\d+[:.\s]", re.IGNORECASE
+)
 
 
 @dataclass(frozen=True)
@@ -116,11 +119,26 @@ def infer_headings(blocks: Sequence[Block], body_size: float, t: Thresholds) -> 
     return tuple(result)
 
 
+_CAPTION_MAX_LEN = 200  # captions are short labels, not full prose paragraphs
+
+
+def tag_captions(blocks: Sequence[Block]) -> tuple[Block, ...]:
+    """Return ``blocks`` with figure/table caption paragraphs re-tagged (kind='caption')."""
+    result = list(blocks)
+    for i, block in enumerate(blocks):
+        text = block.text.lstrip()
+        if block.kind == "paragraph" and _CAPTION_RE.match(text) and len(text) <= _CAPTION_MAX_LEN:
+            result[i] = dataclasses.replace(block, kind="caption")
+    return tuple(result)
+
+
 def _render_block(block: Block, anchor: str | None) -> str:
     if block.kind == "heading":
         return heading(block.level or 3, block.text, anchor or "")
     if block.kind == "table":
         return block.text
+    if block.kind == "caption":
+        return paragraph(block.text, css_class="caption")
     return paragraph(block.text)
 
 
@@ -151,7 +169,7 @@ def build_structure(
 ) -> StructureResult:
     """Split ``blocks`` into chapters at heading boundaries, and build the TOC."""
     body_size, _body_font = body_style(blocks)
-    annotated = infer_headings(blocks, body_size, t)
+    annotated = tag_captions(infer_headings(blocks, body_size, t))
     warnings: list[Warning] = []
 
     heading_idx = [i for i, b in enumerate(annotated) if b.kind == "heading"]

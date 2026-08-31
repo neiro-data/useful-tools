@@ -41,7 +41,9 @@ The CLI surface (implemented in a later stage) targets four subcommands:
 
 ## Design notes
 
-- Images are always omitted from the generated EPUB in v1.
+- Images are always omitted from the generated EPUB in v1; figure/table captions are detected and
+  styled distinctly (`p.caption`, via a shipped base stylesheet) so they no longer read as orphaned
+  body paragraphs.
 - Tables detected below the configured confidence threshold are omitted, with a `Warning` recorded
   on the `BookModel` and surfaced by the validator instead of silently dropped.
 - `models.py` is a hard boundary: no third-party type crosses it, and each third-party library
