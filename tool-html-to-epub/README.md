@@ -21,6 +21,15 @@ EPUB 3. Text-first: explicitly excludes images, covers, JavaScript, CSS fidelity
   uv run html2epub validate out.epub
   ```
 
+## Browser extension (one-click page → EPUB)
+
+`extension/` is an independent sub-project: a Chrome MV3 extension + a local loopback Python
+server that reuses this package's pipeline (`build_book_model_from_html`) — zero duplicated
+sanitize/split/metadata logic. See `extension/README.md` for setup, and
+`extension/MANUAL-TESTS.md` for the manual (non-automatable) test checklist. Safari conversion
+(`xcrun safari-web-extension-converter`) has not been run yet — it requires full Xcode, not just
+Command Line Tools; see `extension/README.md` for the command to run when available.
+
 ## Setup
 
 ```bash

@@ -1,0 +1,80 @@
+body {
+  width: 280px;
+  font-family: -apple-system, system-ui, sans-serif;
+  font-size: 13px;
+  padding: 12px;
+  margin: 0;
+}
+
+h1 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+
+.status {
+  padding: 6px 8px;
+  border-radius: 4px;
+  margin-bottom: 10px;
+}
+
+.status--ok {
+  background: #e6f4ea;
+  color: #1e7d34;
+}
+
+.status--error {
+  background: #fce8e6;
+  color: #c5221f;
+}
+
+.status--unknown {
+  background: #f1f3f4;
+  color: #5f6368;
+}
+
+.field {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.field input {
+  flex: 1;
+  min-width: 0;
+}
+
+button {
+  cursor: pointer;
+}
+
+#convert {
+  width: 100%;
+  padding: 8px;
+  margin-bottom: 10px;
+}
+
+.result {
+  padding: 6px 8px;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  word-break: break-all;
+}
+
+.result--ok {
+  background: #e6f4ea;
+  color: #1e7d34;
+}
+
+.result--error {
+  background: #fce8e6;
+  color: #c5221f;
+}
+
+.hint {
+  font-size: 11px;
+  color: #5f6368;
+}
+
+.hint code {
+  word-break: break-all;
+}
