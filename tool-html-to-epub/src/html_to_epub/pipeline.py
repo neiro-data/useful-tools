@@ -12,6 +12,7 @@ from html_to_epub.config import BuildConfig
 from html_to_epub.extract import ExtractedArticle, extract_article
 from html_to_epub.fetch import fetch_url
 from html_to_epub.loaders import (
+    MetadataOverrides,
     RawDocument,
     load_documents,
     load_metadata_sidecar,
@@ -57,6 +58,60 @@ def build_book_model(config: BuildConfig) -> tuple[BookModel, tuple[str, ...], t
         _, frag, _ = normalized[0]
         result = build_from_single_document(frag, config.split_level)
 
+    book = _resolve_metadata_and_build(
+        config, overrides, docs, raw_pages, articles, normalized, result
+    )
+    fallback_warnings = tuple(
+        f"trafilatura found no main content for {url}; used <body> fallback"
+        for url, article in zip(config.urls, articles, strict=False)
+        if article is not None and article.used_fallback
+    )
+    return book, result.unresolved_hrefs, fallback_warnings
+
+
+def build_book_model_from_html(
+    html: str, source_url: str, config: BuildConfig
+) -> tuple[BookModel, tuple[str, ...], tuple[str, ...]]:
+    """Build a BookModel from already-rendered HTML, skipping the fetch step.
+
+    Intended for callers (e.g. a browser extension capture) that already hold the fully
+    rendered page HTML and just need it run through extraction, normalization, structuring,
+    and metadata resolution.
+    """
+    overrides = load_metadata_sidecar(Path(config.metadata_path) if config.metadata_path else None)
+
+    article = extract_article(html, source_url)
+    stem = article.title or slugify_url(source_url)
+    docs = [RawDocument(file_stem=stem, raw_html=article.html_fragment)]
+    articles: list[ExtractedArticle | None] = [article]
+    raw_pages = [html]
+
+    normalized = [(d.file_stem, normalize_html(d.raw_html), d.raw_html) for d in docs]
+    _, frag, _ = normalized[0]
+    result = build_from_single_document(frag, config.split_level)
+
+    book = _resolve_metadata_and_build(
+        config, overrides, docs, raw_pages, articles, normalized, result, fallback_url=source_url
+    )
+    fallback_warnings = (
+        (f"trafilatura found no main content for {source_url}; used <body> fallback",)
+        if article.used_fallback
+        else ()
+    )
+    return book, result.unresolved_hrefs, fallback_warnings
+
+
+def _resolve_metadata_and_build(
+    config: BuildConfig,
+    overrides: MetadataOverrides,
+    docs: list[RawDocument],
+    raw_pages: list[str],
+    articles: list[ExtractedArticle | None],
+    normalized: list[tuple[str, str, str]],
+    result: StructureResult,
+    fallback_url: str | None = None,
+) -> BookModel:
+    """Resolve the metadata ladder for the primary document and assemble the BookModel."""
     fallback_stem = docs[0].file_stem
     scraped_title = scrape_title(raw_pages[0])
     scraped_author = scrape_author(raw_pages[0])
@@ -66,7 +121,7 @@ def build_book_model(config: BuildConfig) -> tuple[BookModel, tuple[str, ...], t
     extracted_date = primary_article.date if primary_article else None
     canonical_url = primary_article.canonical_url if primary_article else None
 
-    url_for_author = canonical_url or (config.urls[0] if config.urls else None)
+    url_for_author = canonical_url or (config.urls[0] if config.urls else fallback_url)
     derived_author = _derive_author_from_url(url_for_author) if url_for_author else None
 
     title = config.title or overrides.title or extracted_title or scraped_title or fallback_stem
@@ -91,18 +146,12 @@ def build_book_model(config: BuildConfig) -> tuple[BookModel, tuple[str, ...], t
         modified=modified,
     )
 
-    book = BookModel(
+    return BookModel(
         metadata=metadata,
         chapters=result.chapters,
         toc=result.toc,
         spine=tuple(c.file_name for c in result.chapters),
     )
-    fallback_warnings = tuple(
-        f"trafilatura found no main content for {url}; used <body> fallback"
-        for url, article in zip(config.urls, articles, strict=False)
-        if article is not None and article.used_fallback
-    )
-    return book, result.unresolved_hrefs, fallback_warnings
 
 
 def _content_hash(normalized: list[tuple[str, str, str]], prefix: str = "") -> str:

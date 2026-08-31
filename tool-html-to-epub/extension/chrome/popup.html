@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>HTML to EPUB</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <h1>HTML to EPUB</h1>
+
+  <section id="status" class="status status--unknown">Checking server…</section>
+
+  <section class="field">
+    <label for="token">Auth token</label>
+    <input id="token" type="password" placeholder="paste token from config.json" autocomplete="off" />
+    <button id="save-token" type="button">Save</button>
+  </section>
+
+  <button id="convert" type="button" disabled>Convert this page</button>
+
+  <section id="result" class="result" hidden></section>
+
+  <p class="hint">
+    Token lives in <code>~/.config/html-to-epub-extension/config.json</code>.
+    If the server is unreachable, start it with:
+    <code>uv run html2epub-server</code>
+  </p>
+
+  <script src="capture.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

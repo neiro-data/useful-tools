@@ -9,8 +9,7 @@ def test_derive_author_from_url_strips_www_and_tld() -> None:
 
 def test_derive_author_from_url_uses_registrable_label_under_subdomain() -> None:
     assert (
-        _derive_author_from_url("https://docs.tigerdata.com/about/latest/changelog/")
-        == "Tigerdata"
+        _derive_author_from_url("https://docs.tigerdata.com/about/latest/changelog/") == "Tigerdata"
     )
 
 
