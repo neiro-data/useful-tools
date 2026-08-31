@@ -6,6 +6,7 @@ import hashlib
 import re
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from html_to_epub.config import BuildConfig
 from html_to_epub.extract import ExtractedArticle, extract_article
@@ -65,8 +66,13 @@ def build_book_model(config: BuildConfig) -> tuple[BookModel, tuple[str, ...], t
     extracted_date = primary_article.date if primary_article else None
     canonical_url = primary_article.canonical_url if primary_article else None
 
+    url_for_author = canonical_url or (config.urls[0] if config.urls else None)
+    derived_author = _derive_author_from_url(url_for_author) if url_for_author else None
+
     title = config.title or overrides.title or extracted_title or scraped_title or fallback_stem
-    author = config.author or overrides.author or extracted_author or scraped_author
+    author = (
+        config.author or overrides.author or extracted_author or scraped_author or derived_author
+    )
     language = config.language or overrides.language or "en"
     identifier = (
         config.identifier or overrides.identifier or canonical_url or _content_hash(normalized)
@@ -134,6 +140,27 @@ def _valid_modified(date: str | None) -> str | None:
     except ValueError:
         return None
     return date
+
+
+def _derive_author_from_url(url: str) -> str | None:
+    """Last-resort author when no byline exists anywhere: the site's domain, title-cased.
+
+    "https://www.tigerdata.com/some-url" -> "Tigerdata". Only used when config, sidecar,
+    extraction, and <meta name="author"> scraping all come up empty.
+    """
+    host = urlsplit(url).netloc.lower().split(":", 1)[0]
+    labels = [label for label in host.split(".") if label]
+    if labels and labels[0] == "www":
+        labels = labels[1:]
+    if len(labels) >= 2:
+        label = labels[-2]
+    elif labels:
+        label = labels[0]
+    else:
+        return None
+    if not label or label.isdigit():
+        return None
+    return label.capitalize()
 
 
 def slugify_url(url: str) -> str:

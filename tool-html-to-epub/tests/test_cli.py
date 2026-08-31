@@ -159,6 +159,21 @@ def test_metadata_precedence_cli_beats_sidecar_beats_extracted(
     assert rc == 0
 
 
+def test_build_from_url_with_no_byline_falls_back_to_domain_author(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    url = "https://example.com/one"
+    _stub_fetch(monkeypatch, {url: _PAGE_ONE})
+
+    out = tmp_path / "out.epub"
+    rc = main(["build", url, "-o", str(out)])
+    assert rc == 0
+    with zipfile.ZipFile(out) as zf:
+        opf = zf.read("EPUB/content.opf").decode("utf-8")
+    assert "<dc:creator" in opf
+    assert "Example" in opf
+
+
 def test_build_with_bad_scheme_url_reports_error(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

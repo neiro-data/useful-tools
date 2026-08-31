@@ -104,7 +104,10 @@ Everything downstream of the fetch is byte-deterministic, so `pages/` is the art
   One URL behaves like a single file; two or more behave like a directory.
 - Metadata precedence: CLI flags > TOML sidecar > extracted (title/author/date) > scraped
   `<title>`/`<meta>` > fallback. For web sources the canonical URL is preferred as the EPUB
-  identifier over the content hash, being stable and meaningful.
+  identifier over the content hash, being stable and meaningful. Author has one more fallback
+  below scraped `<meta>`: when a URL source has no byline anywhere, the site's domain is
+  title-cased and used instead (`tigerdata.com` -> `Tigerdata`) rather than leaving the book
+  unattributed.
 - `normalize.py` guarantees its output always parses with `xml.etree.ElementTree` — malformed
   XHTML is the most common reason e-readers reject a book.
 - Determinism: content hashing (BLAKE2b) replaces `uuid4()`/`datetime.now()` when no explicit
