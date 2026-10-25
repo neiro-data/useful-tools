@@ -1,125 +1,114 @@
 # Time Tracker — Frontend
 
-React SPA for the personal, offline-first time tracker. Implements the **Today**, **Week**, and
-**Month** screens against the FastAPI backend in `../app` and the design system in `../design`.
+## Resume
 
-- **Stack:** Vite + React 19 + TypeScript (strict), `react-router-dom` for routing.
-- **Design:** imports `../design/tokens.css` globally (see `src/main.tsx`) — no ad hoc colors;
-  everything renders via `var(--...)` tokens. Light/dark follows `prefers-color-scheme`
-  automatically (no manual toggle in this phase, per `design/DESIGN_SYSTEM.md` §5.4).
-- **API contract:** `src/api/` is a typed client for `app/API_CONTRACT.md` /
-  `app/schemas.py` — one module per resource (`categories`, `tags`, `entries`, `timer`, `today`),
-  built on a shared `apiRequest()` fetch wrapper (`src/api/client.ts`).
+This is the React single-page application of the Time Tracker App. It shows the Today, Week,
+Month, Reports and Settings screens. It calls the FastAPI backend in `../app`. It uses the design
+system in `../design`. The parent project is [`../README.md`](../README.md).
 
-## Running locally
+- **Stack:** Vite, React 19, TypeScript in strict mode, and `react-router-dom` for the routes.
+- **Entry point:** `src/main.tsx`. It mounts `src/App.tsx` inside a `BrowserRouter`.
+- **Design:** `src/main.tsx` imports `../../design/tokens.css`. Every colour comes from a
+  `var(--...)` token. The theme follows `prefers-color-scheme`. There is no manual toggle. See
+  [`../design/DESIGN_SYSTEM.md`](../design/DESIGN_SYSTEM.md) §5.4.
+- **API contract:** `src/api/` is a typed client for
+  [`../app/API_CONTRACT.md`](../app/API_CONTRACT.md) and `../app/schemas.py`.
+- **Host requirements:** Node.js and npm. The backend must run at the same time.
 
-This app has two halves that both need to be running:
+## Agent read
 
-1. **Backend** (from the repo root, `time-tracker-app/`):
+If you are an AI agent, read also [README_AGENT.md](README_AGENT.md).
+
+## Quick start
+
+The application has two halves. Both must run.
+
+1. Start the backend from the parent directory `time-tracker-app/`.
 
    ```bash
    uv sync
    uv run uvicorn app.main:app --reload
    ```
 
-   Serves the API at `http://127.0.0.1:8000` (see `app/API_CONTRACT.md`).
+   The API answers at `http://127.0.0.1:8000`.
 
-2. **Frontend** (from this directory, `time-tracker-app/frontend/`):
+2. Start the frontend from this directory.
 
    ```bash
    npm install
    npm run dev
    ```
 
-   Serves the SPA at `http://localhost:5173` (Vite's default). The dev server proxies any
-   `/api/*` request to the backend origin (see "Proxy / origin config" below) — the app itself
-   only ever calls relative `/api/...` paths, so there's no CORS configuration to keep in sync.
+   The interface answers at `http://localhost:5173`.
 
-## Proxy / origin config
+The dev server sends every `/api/*` request to the backend origin. The application calls relative
+paths only, so there is no CORS configuration to keep in step. For the other commands, the proxy
+override and the production build, see [scripts-guide.md](scripts-guide.md).
 
-`vite.config.ts` configures a dev-only proxy:
+## Screens
 
-```ts
-server: {
-  proxy: {
-    "/api": {
-      target: process.env.VITE_BACKEND_ORIGIN ?? "http://127.0.0.1:8000",
-      changeOrigin: true,
-      rewrite: (p) => p.replace(/^\/api/, ""),
-    },
-  },
-},
-```
+`src/App.tsx` holds the route table. The path `/` and any unknown path redirect to `/today`. The
+left navigation rail is `src/components/AppShell/AppShell.tsx`. All five screens are built.
 
-- The app calls `/api/today`, `/api/entries`, etc. — Vite strips the `/api` prefix and forwards
-  the request to the backend's actual root-mounted routes (`/today`, `/entries`, ... per
-  `app/API_CONTRACT.md`).
-- Override the backend origin (e.g. a non-default port) with the `VITE_BACKEND_ORIGIN` env var
-  before running `npm run dev`.
-- A production build (`npm run build`) has no dev proxy — if you ever serve the built `dist/`
-  bundle separately from the backend, put a reverse proxy (nginx, Caddy, etc.) in front with the
-  same `/api` → backend-origin rewrite, or adjust `src/api/client.ts`'s `API_PREFIX`.
+| Route | Page | Content |
+| --- | --- | --- |
+| `/today` | `src/pages/Today/TodayPage.tsx` | The live timer, the quick-add card and today's entries. |
+| `/week` | `src/pages/Week/WeekPage.tsx` | One calendar week, grouped per day, with a category and tag breakdown. |
+| `/month` | `src/pages/Month/MonthPage.tsx` | One calendar month, with the same components as Week. |
+| `/reports` | `src/pages/Reports/ReportsPage.tsx` | A week, month or quarter summary, its charts and its exports. |
+| `/settings` | `src/pages/Settings/SettingsPage.tsx` | The default entry mode, the week start, the export format, the timezone and the categories. |
 
-## Error handling
+The Reports screen exports a report as HTML, Markdown or PDF. It also exports the entries as CSV
+and the database as a backup. The wireframes are in
+[`../design/screens.md`](../design/screens.md).
 
-Every API call goes through `apiRequest()` (`src/api/client.ts`), which normalizes **all**
-non-2xx responses into a single `ApiError` (`src/api/errors.ts`) carrying the backend's stable
-`code` / human-readable `message` / structured `details` (per the error envelope in
-`app/API_CONTRACT.md`). Call sites branch on `error.code` rather than parsing messages or status
-codes, e.g.:
+## API client
 
-```ts
-try {
-  await startTimer({ title });
-} catch (err) {
-  if (err instanceof ApiError && err.isTimerAlreadyRunning) {
-    // err.runningEntryId is the id of the entry already in progress
-  }
-}
-```
+`src/api/` holds one module per resource: `categories`, `entries`, `reports`, `settings`, `tags`,
+`timer` and `today`. Each module calls the shared `apiRequest()` wrapper in `src/api/client.ts`.
+`src/api/types.ts` mirrors `../app/schemas.py`.
 
-The Today screen's `TodayPage` shows a concrete example: starting a timer while one is already
-running surfaces the `409 timer_already_running` conflict as an inline banner ("Stop it and start
-this instead" / "Cancel") rather than a thrown/unhandled exception — see
-`src/pages/Today/TodayPage.tsx`.
+`apiRequest()` turns every non-2xx response into one `ApiError` (`src/api/errors.ts`). The error
+carries the stable `code`, the readable `message` and the structured `details` of the backend
+envelope. A network failure gives the code `network_error`. Call sites branch on `error.code`.
+For the code example and the conflict flow, see
+[README_AGENT.md — Error envelope](README_AGENT.md#error-envelope).
 
-## Project layout
+## Data model
+
+This package creates no database. The single SQLite file belongs to the backend. For the tables,
+the views and the columns, see [`../SCHEMA.md`](../SCHEMA.md). For the HTTP shapes, see
+[`../app/API_CONTRACT.md`](../app/API_CONTRACT.md).
+
+## Layout
 
 ```
 frontend/
 ├── src/
-│   ├── api/            typed API client (client.ts, errors.ts, types.ts, one module per resource)
-│   ├── components/     shared UI: EntryRow, CategoryChip, TagChip, TimerWidget, SegmentedBreakdown,
-│   │                    DayGroup, ManualEntryForm, CategoryPicker, TimerBanner, AppShell, Skeleton...
-│   ├── hooks/           useLiveTimer, useRunningTimer, usePeriodEntries
-│   ├── pages/           Today, Week, Month (routed via react-router-dom)
-│   ├── utils/           duration formatting, date-range math, client-side aggregation
-│   ├── test/            Vitest setup (jest-dom matchers)
-│   ├── App.tsx           route table
-│   └── main.tsx           entry point; imports design/tokens.css + index.css
-├── eslint.config.js
-├── .prettierrc.json
-└── vite.config.ts        dev proxy + vitest config
+│   ├── api/            typed API client: client.ts, errors.ts, types.ts, 7 resource modules
+│   ├── components/     16 shared components: AppShell, EntryRow, TimerWidget, DayGroup,
+│   │                    SegmentedBreakdown, MiniBarChart, StackedCategoryChart, CountLineChart,
+│   │                    CategoryChip, CategoryPicker, TagChip, DateTimePicker, ManualEntryForm,
+│   │                    RecentChipsRail, TimerBanner, Skeleton
+│   ├── hooks/          7 hooks: useCategories, useLiveTimer, usePeriodEntries, useReportSummary,
+│   │                    useRunningTimer, useSettings, useTimezones
+│   ├── pages/          Today, Week, Month, Reports, Settings
+│   ├── utils/          aggregate, categoryColor, dateRange, duration, recentTags, resolveTagIds,
+│   │                    timeRange
+│   ├── test/           the Vitest setup, with the jest-dom matchers
+│   ├── App.tsx         the route table
+│   ├── main.tsx        the entry point; imports ../../design/tokens.css and ./index.css
+│   ├── index.css       the global stylesheet
+│   └── vite-env.d.ts   the Vite client types
+├── dist/               the build output; git ignores it
+├── index.html          the Vite HTML entry point
+├── vite.config.ts      the dev proxy, the fs allow list and the Vitest configuration
+├── eslint.config.js    the ESLint configuration
+├── .prettierrc.json    the Prettier configuration
+├── tsconfig.json       the project references
+├── tsconfig.app.json   the strict compiler options for src/
+├── tsconfig.node.json  the compiler options for vite.config.ts
+├── README.md           this file: what the package is, and the first run
+├── scripts-guide.md    every command, the proxy override and the production build
+└── README_AGENT.md     the notes for an AI agent: contracts, decisions and drift
 ```
-
-## Scripts
-
-```bash
-npm run dev          # start the Vite dev server
-npm run build         # tsc -b (type-check) then vite build
-npm run lint          # eslint .
-npm run format        # prettier --write .
-npm run test          # vitest run (CI mode)
-npm run test:watch    # vitest watch mode
-```
-
-## Notes on scope (Phase 1)
-
-- **Month** reuses Week's shared components as-is (`EntryRow`, `SegmentedBreakdown`, `DayGroup`)
-  over a calendar-month date range instead of a week; there's no dedicated backend endpoint for
-  it — it fetches `GET /entries` with a month-range date filter and aggregates client-side
-  (`src/utils/aggregate.ts`, `src/hooks/usePeriodEntries.ts`), same as Week.
-- **Reports** and **Settings** nav items are present but disabled placeholders, reserved for a
-  later phase.
-- Tag creation is implicit: typing a tag name that doesn't exist yet and saving creates it
-  server-side on save (`src/utils/resolveTagIds.ts`), per `design/screens.md` §1.3.

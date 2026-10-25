@@ -1,132 +1,108 @@
 # html-to-epub
 
-Convert clean HTML (one file, a directory of files, or a web URL) into a valid, deterministic
-EPUB 3. Text-first: explicitly excludes images, covers, JavaScript, CSS fidelity, EPUB 2/NCX, and PDF.
-
 ## Resume
 
-- **What it is:** a CLI, `html2epub`, that sanitizes HTML, splits it into chapters at headings,
-  builds a nested TOC, and writes a byte-deterministic `.epub` file. Same input + config always
-  produces the same output bytes. It also takes `http(s)` URLs directly, stripping page furniture
-  (nav, cookie banners, footers) down to the article itself.
-- **Stack:** Python 3.11+, `uv` project, `src/` layout. Runtime deps: `ebooklib`, `beautifulsoup4`
-  (with `lxml`), `httpx` (fetch), `trafilatura` (article extraction). Dev: `pytest`, `ruff`,
-  `mypy` (strict).
-- **How to run:**
-  ```bash
-  uv sync
-  uv run html2epub build <input.html|dir|url> -o out.epub
-  uv run html2epub fetch <url> -o pages/      # save extracted article HTML for offline builds
-  uv run html2epub inspect <input.html|dir|url>
-  uv run html2epub validate out.epub
-  ```
+- **What it is:** a command line tool, `html2epub`. It reads clean HTML and writes a valid
+  EPUB 3 file. The input is one HTML file, a directory of HTML files, or an `http(s)` address.
+- **What it does:** it removes unsafe and decorative markup, splits the text into chapters at the
+  headings, builds a nested table of contents (TOC), and writes the book. For a web address it
+  first removes the page furniture (navigation, cookie banners, footers) and keeps the article.
+- **Deterministic:** the same input and the same configuration always give the same output bytes.
+- **Out of scope:** images, covers, JavaScript, CSS fidelity, and PDF input. The tool writes
+  EPUB 3 only. It adds an NCX item as a fallback for old readers.
+- **Stack:** Python 3.11 or later, a `uv` project, a `src/` layout. Runtime packages: `ebooklib`,
+  `beautifulsoup4` with `lxml`, `httpx`, `trafilatura`. Development packages: `pytest`, `ruff`,
+  `mypy` in strict mode.
+- **Entry point:** `html2epub` maps to `html_to_epub.cli:main`.
+- **Host requirements:** `uv`, and network access for a build from a web address. No database and
+  no other service.
 
-## Browser extension (one-click page → EPUB)
+## Agent read
+If you are an AI agent, read also [README_AGENT.md](README_AGENT.md).
 
-`extension/` is an independent sub-project: a Chrome MV3 extension + a local loopback Python
-server that reuses this package's pipeline (`build_book_model_from_html`) — zero duplicated
-sanitize/split/metadata logic. See `extension/README.md` for setup, and
-`extension/MANUAL-TESTS.md` for the manual (non-automatable) test checklist. Safari conversion
-(`xcrun safari-web-extension-converter`) has not been run yet — it requires full Xcode, not just
-Command Line Tools; see `extension/README.md` for the command to run when available.
-
-## Setup
+## Quick start
 
 ```bash
-uv sync
+uv sync                                                              # create .venv, install
+uv run html2epub build tests/fixtures/single.html -o /tmp/out.epub   # one file
+uv run html2epub build tests/fixtures/book/ -o /tmp/book.epub        # one chapter per file
+uv run html2epub inspect tests/fixtures/single.html                  # print the derived tree
+uv run html2epub validate /tmp/out.epub                              # check a written file
+uv run pytest tests                                                  # 54 tests
 ```
 
-## Usage
+For every other command and flag, see [scripts-guide.md](scripts-guide.md).
 
-```bash
-# Build from a single HTML file
-uv run html2epub build tests/fixtures/single.html -o /tmp/out.epub
+## Commands
 
-# Build from a directory of HTML files (one chapter per file, sorted by filename)
-uv run html2epub build tests/fixtures/book/ -o /tmp/book.epub
+The CLI has four sub-commands. Each one accepts a file, a directory, or a web address, except
+`validate`, which reads a written `.epub` file.
 
-# Override / supply metadata (CLI flags > TOML sidecar > scraped <title>/<meta>)
-uv run html2epub build input.html -o out.epub \
-  --title "My Book" --author "Jane Doe" --language en \
-  --metadata meta.toml
+| Command | What it does | Guide |
+| --- | --- | --- |
+| `build` | Writes one `.epub` file | [scripts-guide.md — Build](scripts-guide.md#build) |
+| `fetch` | Saves the extracted article as HTML | [scripts-guide.md — Fetch, then build](scripts-guide.md#fetch-then-build) |
+| `inspect` | Prints the chapters, the TOC, and the spine | [scripts-guide.md — Inspect and validate](scripts-guide.md#inspect-and-validate) |
+| `validate` | Checks a written `.epub` file | [scripts-guide.md — Inspect and validate](scripts-guide.md#inspect-and-validate) |
 
-# Split chapters on <h1> only (default) or <h1>+<h2>
-uv run html2epub build input.html -o out.epub --split-level 2
+Metadata comes from the CLI flags, a TOML sidecar, the page itself, or a fallback, in that order.
+See [scripts-guide.md — Metadata](scripts-guide.md#metadata).
 
-# Inspect the derived chapter/TOC/spine tree without writing anything
-uv run html2epub inspect input.html
+## Build from the web
 
-# Validate a written EPUB
-uv run html2epub validate out.epub
+Give `build` one address for one article, or `--url-list <file>` for one chapter per address. The
+tool then fetches the pages and keeps the article text only.
+
+Read the two limits before you trust the output. Article extraction is a heuristic: when it finds
+no main content, the build uses the whole `<body>` and prints a `[warning]` line. URL safety is
+scheme-only: the tool accepts `http` and `https` and rejects every other scheme, but it does not
+block a private or internal address.
+
+A build from a live address is not reproducible, because the page can change. Use `fetch` first
+when you need the same bytes again. See
+[scripts-guide.md — Build from the web](scripts-guide.md#build-from-the-web).
+
+## Browser extension
+
+`extension/` is a separate project. It holds a Chrome MV3 extension and a small local server. The
+server reuses this package's pipeline, so no sanitize, split, or metadata logic is duplicated. One
+click in the browser gives you the open page as an EPUB file.
+
+The extension has its own `pyproject.toml`, its own lockfile, and its own documents. Run its
+commands from `extension/`. See [extension/README.md](extension/README.md).
+
+## Schema
+
+The project uses no database. The two persistent formats are the `.epub` file and the `fetch`
+output directory. The internal contract between the steps is the frozen dataclass set in
+`models.py`.
+
+[SCHEMA.md](SCHEMA.md) holds the pipeline shape, the book model, the sanitized element set, the
+metadata precedence, the two output formats, and the validator checks.
+
+## Layout
+
 ```
-
-### Building from the web
-
-```bash
-# Single URL -> single-article book (headings split it into chapters, as with a local file)
-uv run html2epub build https://example.com/some-article -o out.epub
-
-# Several URLs -> one chapter per URL, in the order listed (blank lines and # comments ignored)
-uv run html2epub build --url-list urls.txt -o out.epub
-
-# Tune the network step
-uv run html2epub build <url> -o out.epub --timeout 30 --user-agent "my-reader/1.0"
-```
-
-A positional input and `--url-list` cannot be combined — supplying both is an error rather than a
-silent drop.
-
-### Determinism caveat for URLs
-
-A direct URL -> EPUB build is only as reproducible as the page behind the URL: the site can change
-its content, its markup, or serve you something different tomorrow. Building the same URL twice is
-**not** guaranteed to produce the same bytes.
-
-Use the two-step flow when reproducibility matters. `fetch` makes the network step explicit and
-repeatable, writing the *extracted* article as `NNNN-<slug>.html` — numbered so the directory sorts
-back into reading order:
-
-```bash
-uv run html2epub fetch --url-list urls.txt -o pages/
-uv run html2epub build pages/ -o out.epub      # fully deterministic, and offline
-```
-
-Everything downstream of the fetch is byte-deterministic, so `pages/` is the artifact worth keeping
-(and committing) if you need to rebuild the same book later.
-
-### Extraction limits
-
-- Article extraction is a heuristic. When it finds no main content, the build falls back to the
-  whole `<body>` and prints a `[warning]` line — the book still builds, but that chapter will
-  contain page furniture. Check the warning before trusting the output.
-- URL safety is **scheme-only**: `http`/`https` are allowed, everything else is rejected, and the
-  scheme is re-checked after redirects. There is no guard against URLs pointing at private or
-  internal addresses — this is a local tool that fetches what you ask it to fetch.
-
-## Design notes
-
-- `models.py` is the hard internal boundary: parsing and chapter-splitting logic never see
-  `ebooklib` types. One module per third-party library: only `epub_writer.py` imports `ebooklib`,
-  only `fetch.py` imports `httpx`, only `extract.py` imports `trafilatura`.
-- The URL path converges early: fetched pages become the same `RawDocument`s the file loader
-  returns, so normalize -> structure -> write is shared with local input and untouched by it.
-  One URL behaves like a single file; two or more behave like a directory.
-- Metadata precedence: CLI flags > TOML sidecar > extracted (title/author/date) > scraped
-  `<title>`/`<meta>` > fallback. For web sources the canonical URL is preferred as the EPUB
-  identifier over the content hash, being stable and meaningful. Author has one more fallback
-  below scraped `<meta>`: when a URL source has no byline anywhere, the site's domain is
-  title-cased and used instead (`tigerdata.com` -> `Tigerdata`) rather than leaving the book
-  unattributed.
-- `normalize.py` guarantees its output always parses with `xml.etree.ElementTree` — malformed
-  XHTML is the most common reason e-readers reject a book.
-- Determinism: content hashing (BLAKE2b) replaces `uuid4()`/`datetime.now()` when no explicit
-  identifier/date is given; the written zip has fixed entry timestamps, sorted order, and
-  `mimetype` stored first and uncompressed.
-
-## Tests
-
-```bash
-uv run pytest
-uv run ruff check .
-uv run mypy
+tool-html-to-epub/
+├── README.md              this file: what it is, and the first run
+├── README_AGENT.md        module map, design decisions, drift warnings
+├── scripts-guide.md       every command and flag
+├── SCHEMA.md              data contract, metadata rules, output formats
+├── pyproject.toml         project, dependencies, ruff and mypy settings
+├── uv.lock
+├── src/html_to_epub/      12 modules, one per step of the pipeline
+│   ├── __init__.py
+│   ├── cli.py             argparse: build, fetch, inspect, validate
+│   ├── config.py          BuildConfig
+│   ├── epub_writer.py     the only module that imports ebooklib
+│   ├── extract.py         the only module that imports trafilatura
+│   ├── fetch.py           the only module that imports httpx
+│   ├── loaders.py         read files and the TOML sidecar
+│   ├── models.py          the internal contract
+│   ├── normalize.py       sanitize to a well-formed XHTML fragment
+│   ├── pipeline.py        load -> normalize -> structure -> BookModel
+│   ├── structure.py       split into chapters, build the TOC
+│   └── validator.py       model checks and written-file checks
+├── tests/                 7 test modules, 54 tests, and fixtures/
+└── extension/             separate project: Chrome MV3 extension + local server
 ```

@@ -6,251 +6,121 @@
 
 ## Resume
 
-A personal, offline-first time tracker. It runs entirely on `localhost`: a **FastAPI** backend
-with **SQLite** as the canonical data store, and a **React** single-page app frontend. There is no
-cloud dependency — all data lives in a local SQLite file.
+Time Tracker App is a personal, offline-first time tracker. It runs on `localhost` only. There is
+no cloud dependency. All data stays in one local SQLite file.
 
-- **Backend:** FastAPI + SQLite (`app/`) — implements `app/API_CONTRACT.md`.
-- **Frontend:** React SPA (`frontend/`) — Today, Week, Month, Reports, and Settings screens
-  (see `frontend/README.md`).
+- **Backend:** FastAPI and SQLite, in `app/`. It implements [`app/API_CONTRACT.md`](app/API_CONTRACT.md).
+- **Frontend:** a React single-page application, in `frontend/`. It has the Today, Week, Month,
+  Reports and Settings screens. See [`frontend/README.md`](frontend/README.md).
+- **Entry point:** `app.main:app` for the API, and `frontend/` for the interface.
+- **Host requirements:** Python 3.11 or later, [`uv`](https://docs.astral.sh/uv/), Node.js and npm.
+  Docker Compose is an alternative to both.
 
-As of this point, the app is in the version v1.0. 
-Most of the identified bugs were corrected and the app is outputting what is intended.
-Regarding the reports, the Outlook-compatibility had to be dropped in order to have the report graphics.
-One can still export it as Markdown file (more raw format), HTML and PDF - 
-which is a easy way to send by email.
-An export of the database is also always possible.
+The application is at version v1.0. Most of the known bugs are corrected. The reports dropped the
+Outlook compatibility, because the report graphics need inline `<svg>` and a `<style>` block. You
+can still export a report as Markdown, HTML or PDF, and send it by email. A database export is
+always available.
 
-### Features
+## Agent read
 
-- **Time tracking** — log entries against categories and tags; a live timer for the current task.
-- **Today / Week / Month** — review tracked time across day, week, and month views; the Week header
-  shows the ISO calendar week (`CW 01`–`CW 53`). Entries can be edited inline, including their
-  start/end times.
-- **Reports** — period summaries (week/month/quarter) with per-category and per-tag breakdowns,
-  daily bars, zero-filled weekly bars, a stacked hours-by-category chart, an entry-count line chart,
-  and a rule-based narrative summary of the period. Month/quarter bars are labelled by calendar
-  week (`CW 27`), with the full date range on hover.
-- **Exports** — download your data as an Outlook-friendly HTML report (with bar-chart graphics),
-  a Markdown report, a PDF report, a CSV, or a raw SQLite database backup.
-- **Settings** — configure timezone (drives day boundaries), week start, default entry mode, and
-  default export format.
+If you are an AI agent, read also [README_AGENT.md](README_AGENT.md).
 
-### Project layout
+## Quick start
+
+The application has two halves. Both must run.
+
+1. Install the backend dependencies and start the API.
+
+   ```bash
+   uv sync
+   uv run uvicorn app.main:app --reload
+   ```
+
+   The API answers at `http://127.0.0.1:8000`. The health check is at `/health`.
+
+2. In a second terminal, start the frontend.
+
+   ```bash
+   cd frontend
+   npm install
+   npm run dev
+   ```
+
+   The interface answers at `http://localhost:5173`. It proxies every `/api/*` call to the API.
+
+For Docker, the quality checks, the dummy database and the configuration, see
+[scripts-guide.md](scripts-guide.md).
+
+## Time tracking
+
+You log an entry against one category and any number of tags. A live timer records the current
+task. The Today, Week and Month screens show the tracked time per day, week and month. The Week
+header shows the ISO calendar week, from `CW 01` to `CW 53`. You can edit an entry in place,
+including its start time and its end time.
+
+## Reports
+
+A report summarizes one period: a week, a month or a quarter. It breaks the time down per category
+and per tag. It draws daily bars, zero-filled weekly bars, a stacked hours-by-category chart and an
+entry-count line chart. It also writes a rule-based narrative of the period. The month bars and the
+quarter bars carry a calendar-week label, such as `CW 27`, and the full date range on hover.
+
+## Exports
+
+Five downloads are available. `app/routers/exports.py` builds them all.
+
+| Export | Content |
+| --- | --- |
+| `GET /exports/report.html` | The report as one self-contained HTML document, with the charts. |
+| `GET /exports/report.md` | The report as Markdown, in a raw format. |
+| `GET /exports/report.pdf` | The report as a PDF document. |
+| `GET /exports/entries.csv` | Every completed entry, as CSV. |
+| `GET /exports/backup` | A copy of the raw SQLite database. |
+
+The HTML export has no Outlook-compatibility constraint. It uses an inline `<style>` block and
+inline `<svg>`, and no export renders a data table.
+
+## Settings
+
+The Settings screen holds four values: the timezone, which sets the day boundaries; the first day
+of the week; the default entry mode; and the default export format. The `settings` table holds
+exactly one row. See [scripts-guide.md — Configuration](scripts-guide.md#configuration) for the
+environment variables that override the defaults.
+
+## Schema
+
+The database is SQLite with six tables: `categories`, `tags`, `entries`, `entry_tags`,
+`report_exports` and `settings`. The canonical data definition lives in `app/db_schema.py`, which
+also runs the idempotent initialization and the migrations.
+
+[SCHEMA.md](SCHEMA.md) holds the entity-relationship diagram, the
+[conventions](SCHEMA.md#conventions) to read before you write a query, the
+[indexes](SCHEMA.md#indexes) and the [seed data](SCHEMA.md#seed-data).
+
+## Layout
 
 ```
 time-tracker-app/
-├── app/
-│   ├── __init__.py
-│   ├── main.py      # FastAPI app, CORS, health check, router wiring
-│   ├── config.py    # pydantic-settings configuration (env-driven)
-│   ├── api.py       # root API router (feature routers plug in here)
-│   ├── db.py        # SQLite connection helper
-│   ├── db_schema.py   # SQLite DDL, indexes, idempotent init + migrations
-│   ├── dummy_data.py  # generates a disposable, git-ignored sample database
-│   ├── schemas.py     # Pydantic request/response models (the HTTP contract)
-│   ├── API_CONTRACT.md # endpoint contract (paths, bodies, status codes, error envelope)
-│   └── routers/       # categories, tags, entries, timer, today, reports, settings, exports
-├── design/
-│   ├── DESIGN_SYSTEM.md
-│   ├── tokens.css      # CSS custom properties, imported directly by the frontend
-│   └── screens.md      # Today/Week/Month/Reports/Settings wireframes + keyboard shortcuts
-├── frontend/           # React SPA (Vite + TypeScript) — see frontend/README.md
-├── tests/
-├── pyproject.toml
-└── uv.lock
+├── app/                      # FastAPI backend: routers, schemas, storage, exports
+│   └── API_CONTRACT.md       # the HTTP contract: paths, bodies, status codes, errors
+├── frontend/                 # React single-page application (Vite + TypeScript)
+│   └── README.md             # frontend stack, proxy and origin configuration
+├── design/                   # DESIGN_SYSTEM.md, screens.md, tokens.css
+├── docker/
+│   └── nginx.conf            # the nginx configuration of the frontend container
+├── seed/
+│   └── categories.toml       # the declarative category seed
+├── test_reports/             # sample report output, with a README.md that explains it
+├── tests/                    # 18 pytest modules, plus conftest.py and _time_helpers.py
+├── Dockerfile.backend        # the backend image
+├── Dockerfile.frontend       # the frontend image, served by nginx
+├── docker-compose.yml        # both containers, for the full stack
+├── pyproject.toml            # the project manifest
+├── uv.lock                   # the locked dependencies
+├── README.md                 # this file: what the application is, and how to start it
+├── README_AGENT.md           # the agent notes: module map, the dummy-data guard, docs map
+├── scripts-guide.md          # every command, grouped by target
+├── SCHEMA.md                 # the SQLite data model
+├── How-to-guide.md           # a first-run walkthrough of the application
+└── sqlite-command-guide.md   # a reference for the sqlite3 CLI and its SQL dialect
 ```
-
-## Database
-
-SQLite, six tables. The diagram below is a **Mermaid** `erDiagram` embedded directly in this file —
-GitHub renders it natively, so there is no image to regenerate and keep in sync, and the diff of a
-schema change is readable in review. The canonical DDL lives in `app/db_schema.py`; this is a view
-of it, so update both together.
-
-```mermaid
-erDiagram
-    categories ||--o{ entries : "categorizes"
-    entries    ||--o{ entry_tags : "tagged by"
-    tags       ||--o{ entry_tags : "applied to"
-
-    categories {
-        INTEGER id PK
-        TEXT    name UK "NOT NULL, unique - also the seed match key"
-        TEXT    color "nullable, hex or CSS name, max 32 chars"
-        INTEGER is_active "NOT NULL, default 1 - UI-owned, never seeded"
-        INTEGER sort_order "NOT NULL, default 0 - spaced in gaps of 10"
-    }
-
-    tags {
-        INTEGER id PK
-        TEXT    name UK "NOT NULL, unique - created on first use"
-        INTEGER is_active "NOT NULL, default 1"
-    }
-
-    entries {
-        INTEGER id PK
-        TEXT    title "NOT NULL"
-        TEXT    notes "nullable"
-        INTEGER category_id FK "NOT NULL, ON DELETE RESTRICT"
-        TEXT    start_ts "NOT NULL, ISO-8601 UTC"
-        TEXT    end_ts "nullable - NULL while a timer is running"
-        REAL    duration_minutes "nullable until the entry is closed"
-        TEXT    entry_mode "NOT NULL, CHECK in (timer, manual)"
-        TEXT    created_at "NOT NULL, ISO-8601 UTC"
-        TEXT    updated_at "NOT NULL, ISO-8601 UTC"
-    }
-
-    entry_tags {
-        INTEGER entry_id PK,FK "ON DELETE CASCADE"
-        INTEGER tag_id PK,FK "ON DELETE CASCADE"
-    }
-
-    report_exports {
-        INTEGER id PK
-        TEXT    report_type "NOT NULL, CHECK in (weekly, monthly, quarterly)"
-        TEXT    period_start "NOT NULL"
-        TEXT    period_end "NOT NULL"
-        TEXT    format "NOT NULL, CHECK in (html, csv, pdf, md)"
-        TEXT    created_at "NOT NULL, ISO-8601 UTC"
-        TEXT    file_path "NOT NULL"
-    }
-
-    settings {
-        INTEGER id PK
-        TEXT    default_entry_mode "NOT NULL, CHECK in (timer, manual)"
-        TEXT    week_starts_on "NOT NULL"
-        TEXT    default_export_format "NOT NULL, CHECK in (html, csv, pdf, md)"
-        TEXT    database_label "NOT NULL"
-        TEXT    timezone "NOT NULL - drives day boundaries"
-    }
-```
-
-`report_exports` and `settings` stand alone — neither has a foreign key. `settings` holds exactly
-one row, seeded on first bootstrap by `init_db`.
-
-**Conventions worth knowing before writing queries:**
-
-- **Timestamps are ISO-8601 TEXT in UTC** (`2026-07-13T14:30:00+00:00`). They sort
-  lexicographically the same as chronologically and survive CSV/JSON round-trips. Callers
-  normalize to UTC on write and localize on display using `settings.timezone`.
-- **Booleans are `INTEGER` 0/1** — SQLite has no boolean type.
-- **Enum-like columns use `CHECK` constraints**, not lookup tables: the value sets are small,
-  fixed, and app-defined rather than user-editable.
-- **Foreign keys are enforced**, but only because every connection sets `PRAGMA foreign_keys = ON`
-  (SQLite defaults it off, per-connection). Ad-hoc `sqlite3` shell sessions do *not* get this for
-  free — set it yourself before mutating data.
-
-Indexes beyond the implicit primary keys and `UNIQUE` constraints:
-
-| Index | Column(s) | Serves |
-| --- | --- | --- |
-| `idx_entries_start_ts` | `entries (start_ts)` | date-range scans — the hottest pattern (Today/Week/Month/Reports) |
-| `idx_entries_category_id` | `entries (category_id)` | filtering time by category, and the FK lookup |
-| `idx_entry_tags_tag_id` | `entry_tags (tag_id)` | the reverse join: "all entries with tag Y" |
-
-`entry_tags`' primary key `(entry_id, tag_id)` already indexes `entry_id` first, which is why only
-the reverse direction needs an explicit index.
-
-## Requirements
-
-- Python 3.11+ and [`uv`](https://docs.astral.sh/uv/) for the backend.
-- Node.js + npm for the frontend (see `frontend/README.md`).
-
-## Getting started
-
-This app has two halves that both need to be running for the SPA to work end-to-end:
-
-**1. Backend** — install deps and start the API server:
-
-```bash
-uv sync
-uv run uvicorn app.main:app --reload
-```
-
-The API will be available at `http://127.0.0.1:8000`, with a health check at
-`http://127.0.0.1:8000/health`.
-
-**2. Frontend** — in a second terminal, from `frontend/`:
-
-```bash
-cd frontend
-npm install
-npm run dev
-```
-
-The SPA will be available at `http://localhost:5173` (Vite's default) and proxies `/api/*` calls
-to the backend above — see `frontend/README.md` for the proxy/origin config and full details.
-
-## Development
-
-```bash
-uv run ruff check .      # lint
-uv run ruff format .     # format
-uv run mypy app          # type-check
-uv run pytest -q         # run tests
-```
-
-### Dummy database for experiments
-
-The automated tests already isolate themselves (each one gets a fresh SQLite file in `tmp_path`).
-Poking at the app *by hand* does not: curling an endpoint, opening the SPA, or running a script all
-hit whatever `TIME_TRACKER_DATABASE_PATH` points at, which by default is your real
-`time_tracker.db`. Generate a disposable database and point at that instead:
-
-```bash
-uv run python -m app.dummy_data                  # write ./dummy.db with ~4 weeks of sample data
-uv run python -m app.dummy_data --days 90        # a quarter, so Reports has something to chew on
-uv run python -m app.dummy_data --running-timer  # also leave one entry open, as if a timer were running
-uv run python -m app.dummy_data --reset          # delete the file and rebuild from scratch
-```
-
-Then run the backend against it:
-
-```bash
-TIME_TRACKER_DATABASE_PATH=dummy.db uv run uvicorn app.main:app --reload
-```
-
-`dummy.db` is git-ignored — it is regenerated, never committed.
-
-**It will not clobber your real data.** The generated database is branded: its
-`settings.database_label` is set to `DUMMY DATA (app.dummy_data)`. Before writing to or deleting an
-existing file, the generator reads that label back and refuses unless it matches — so
-`--path time_tracker.db` fails with an error rather than overwriting your entries. Anything that is
-not a time-tracker database is refused too. The guard is on content, not filename, so renaming a
-file cannot defeat it.
-
-Generation is seeded (`--seed`, default `20260713`): the same arguments always produce the same
-database, which keeps comparisons and screenshots stable. Categories come from
-`seed/categories.toml`, so the dummy data uses your real taxonomy; entries land on weekdays only,
-in quarter-hour blocks from 09:00, with 0–2 tags each.
-
-## Configuration
-
-Settings are loaded via `pydantic-settings` from environment variables (prefix
-`TIME_TRACKER_`) and, optionally, a local `.env` file (not committed). Key settings include
-`database_path` (defaults to `time_tracker.db`) and CORS origins for the future React dev server.
-
-## Docker
-
-Run the full stack (backend API + frontend SPA behind nginx) with Docker Compose:
-
-```bash
-docker compose up --build
-```
-
-- Frontend: `http://localhost:8080` (API calls proxied under `/api` to the backend container).
-- Backend: also directly reachable at `http://localhost:8000` for debugging.
-- SQLite data is bind-mounted from `./time_tracker.db` on the host into the backend container, so
-  Docker reads/writes the same file as a local `uv run uvicorn` run — it persists across
-  `docker compose down`/`up` and is editable/inspectable with any SQLite tool on the host. Don't
-  run the Docker backend and a local `uv run uvicorn` against it at the same time; SQLite doesn't
-  like concurrent writers.
-- Override settings via `TIME_TRACKER_*` env vars, e.g. a `.env` file at the project root
-  (already git-ignored).
-- Categories are not auto-seeded on startup (opt-in, matches `app/seed.py`). Seed once after
-  first boot:
-
-  ```bash
-  docker compose exec backend python -m app.seed
-  ```
