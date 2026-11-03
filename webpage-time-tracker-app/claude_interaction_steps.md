@@ -172,3 +172,21 @@ was supposed to — yes, `refreshConfig` is in the shared core, both builds run 
 - Verified: ruff, ruff format, mypy strict, 160 pytest, `build.py --check`, `node --check` on both
   dists. The Safari checklist itself still needs a human run — steps 3 (cross-origin storage) and 5
   (loopback under Safari's local-network policy) remain unconfirmed.
+
+## 2026-08-22 — `fix/wtt-fullscreen-video-counter` (from `branch-time-tracker-app`)
+
+Bug: the counter stopped while a YouTube video played fullscreen. Root cause is idle
+detection, not fullscreen: passive watching emits no mousemove/keydown/scroll, so after
+`idleSeconds` (60s) `isCounting()` returned false and the clock stopped on a
+visible/focused tab.
+
+- Fix in `core.js`: added `isVideoPlaying()` (any `<video>` with `!paused && !ended &&
+  readyState > 2`) and made the idle branch `if (idle && !isVideoPlaying()) return false`.
+  Kept the visible + focused guards so a background-tab video still never counts.
+- Rebuilt both dists via `tools/build.py`; hand edits to `dist/` avoided.
+- Regression test in `test_build.py` (source-assertion style) pinning the probe and the
+  retained tab-scoping guards. Bug had no test.
+- Implemented inline (no specialist pipeline) at the user's explicit direction — declared.
+- Verified: ruff, ruff format, mypy strict, 161 pytest, `build.py --check`, `node --check`
+  on both dists. Runtime in-browser check still needs a human (mouse still >60s in
+  fullscreen keeps ticking; a paused video still goes idle).
