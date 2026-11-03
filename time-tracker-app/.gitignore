@@ -50,3 +50,11 @@ frontend/coverage/
 # how to regenerate them. Must be `test_reports/*`, not `test_reports/`: an ignored *directory* is
 # never descended into, so the negation below would not be seen.
 test_reports/*
+
+.symbol-index/
+
+claude_interaction_steps.md
+*[Hh][Aa][Nn][Dd][Oo][Ff][Ff]*.md
+plan-*.md
+to-do-*.md
+handoff-*.md
