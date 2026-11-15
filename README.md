@@ -20,6 +20,7 @@ self-contained project in its own subdirectory.
 | [`tool-sql-to-drawio/`](tool-sql-to-drawio/) | Turns a PostgreSQL DDL dump into a draw.io ER diagram. | Python, `sqlglot` |
 | [`tool-html-to-epub/`](tool-html-to-epub/) | Converts clean HTML into a deterministic EPUB 3. | Python, `EbookLib` |
 | [`tool-pdf-to-epub/`](tool-pdf-to-epub/) | Converts a machine-readable PDF into a deterministic EPUB 3. | Python, PyMuPDF, pdfplumber, `EbookLib` |
+| [`tool-face-blur/`](tool-face-blur/) | Blurs faces in an image offline, from a CLI or a local web UI. | Python, OpenCV (YuNet), Pillow, Flask |
 
 ### [`time-tracker-app/`](time-tracker-app/)
 
@@ -60,6 +61,14 @@ It is not a visual-fidelity converter. It produces no fixed-layout EPUB. It give
 a magazine, a brochure or a diagram-heavy PDF, and it does not preserve footnotes or sidebars as
 such. See [`tool-pdf-to-epub/README.md`](tool-pdf-to-epub/README.md).
 
+### [`tool-face-blur/`](tool-face-blur/)
+
+The `face-blur` CLI detects faces with the bundled YuNet model and blurs them with a Gaussian,
+pixelate or solid fill. The `serve` command opens a local web UI: you toggle the detected boxes,
+draw extra rectangles, preview, and download. Nothing goes over the network, the server binds to
+`127.0.0.1`, and the output has no EXIF metadata. Gaussian blur at low strength can be partly
+reversed, so use `solid` for sensitive images. See [`tool-face-blur/README.md`](tool-face-blur/README.md).
+
 ## Layout
 
 ```
@@ -68,5 +77,6 @@ webpage-time-tracker-app/   the userscript and its Tkinter settings app
 tool-sql-to-drawio/         SQL DDL to a draw.io ER diagram
 tool-html-to-epub/          HTML to EPUB 3
 tool-pdf-to-epub/           PDF to EPUB 3
+tool-face-blur/             face blurring, CLI and local web UI
 README.md                   this file - what each tool is
 ```
